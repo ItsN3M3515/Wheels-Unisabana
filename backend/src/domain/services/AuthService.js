@@ -312,6 +312,106 @@ class AuthService {
   }
 
   /**
+   * Reset Password (Token Redemption)
+   * 
+   * Validates reset token and sets new password. This is an out-of-session operation.
+   * 
+   * Validation Steps:
+   * 1. Hash token and look up user
+   * 2. Check token exists → 400 invalid_token
+   * 3. Check token not expired → 410 token_expired
+   * 4. Check token not consumed → 409 token_used
+   * 5. Hash new password (bcrypt)
+   * 6. Update password and mark token consumed
+   * 
+   * @param {Object} userRepository - Repository for user operations
+   * @param {string} token - Raw token from email (base64url)
+   * @param {string} newPassword - New plaintext password
+   * @param {string} clientIp - Client IP for logging
+   * @returns {Promise<Object>} - { success: true }
+   * @throws {Error} - invalid_token (400), token_expired (410), token_used (409)
+   * 
+   * Security:
+   * - Never logs passwords or tokens
+   * - Uses constant-time token comparison
+   * - Marks token as consumed (one-time use)
+   * - Updates passwordChangedAt timestamp
+   */
+  async resetPassword(userRepository, token, newPassword, clientIp = 'unknown') {
+    try {
+      // 1. Hash token to look up user
+      const tokenHash = ResetTokenUtil.hashToken(token);
+      
+      // 2. Find user by token hash
+      const user = await userRepository.findByResetToken(tokenHash);
+      
+      // 3. Check token exists
+      if (!user || !user.resetPasswordToken) {
+        console.log(`[AuthService] Invalid reset token attempt | ip: ${clientIp}`);
+        const error = new Error('The reset link is invalid');
+        error.code = 'invalid_token';
+        error.statusCode = 400;
+        throw error;
+      }
+      
+      // 4. Verify token match (constant-time comparison)
+      const isValidToken = ResetTokenUtil.verifyToken(token, user.resetPasswordToken);
+      if (!isValidToken) {
+        console.log(`[AuthService] Token mismatch | userId: ${user.id} | ip: ${clientIp}`);
+        const error = new Error('The reset link is invalid');
+        error.code = 'invalid_token';
+        error.statusCode = 400;
+        throw error;
+      }
+      
+      // 5. Check token not expired
+      if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+        console.log(`[AuthService] Expired reset token | userId: ${user.id} | expired: ${user.resetPasswordExpires?.toISOString()} | ip: ${clientIp}`);
+        const error = new Error('The reset link has expired');
+        error.code = 'token_expired';
+        error.statusCode = 410;
+        throw error;
+      }
+      
+      // 6. Check token not already consumed
+      if (user.resetPasswordConsumed) {
+        console.log(`[AuthService] Already consumed reset token | userId: ${user.id} | consumed: ${user.resetPasswordConsumed.toISOString()} | ip: ${clientIp}`);
+        const error = new Error('The reset link has already been used');
+        error.code = 'token_used';
+        error.statusCode = 409;
+        throw error;
+      }
+      
+      // 7. Hash new password (bcrypt)
+      const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
+      const newPasswordHash = await bcrypt.hash(newPassword, bcryptRounds);
+      
+      // 8. Update password and consume token
+      await userRepository.updatePasswordAndConsumeToken(user.id, newPasswordHash);
+      
+      // Log success WITHOUT sensitive data
+      console.log(`[AuthService] Password reset successful | userId: ${user.id} | ip: ${clientIp}`);
+      
+      return { success: true };
+      
+    } catch (error) {
+      // Re-throw known errors (invalid_token, token_expired, token_used)
+      if (error.code && error.statusCode) {
+        throw error;
+      }
+      
+      // Log unexpected errors WITHOUT sensitive data
+      console.error('[AuthService] Password reset failed (internal error):', error.message);
+      
+      // Generic error for client
+      const genericError = new Error('Failed to reset password');
+      genericError.code = 'password_reset_error';
+      genericError.statusCode = 500;
+      throw genericError;
+    }
+  }
+
+  /**
    * Get JWT configuration (for testing/debugging)
    * 
    * @returns {Object} - { expiresIn, issuer, audience }

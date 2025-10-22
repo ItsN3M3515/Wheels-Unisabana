@@ -325,6 +325,81 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * POST /auth/password/reset
+   * 
+   * Redeems reset token and sets new password (out-of-session)
+   * 
+   * Request Body:
+   * {
+   *   "token": "base64url_token_from_email",
+   *   "newPassword": "StrongPassword123!"
+   * }
+   * 
+   * Response 200 (Success):
+   * {
+   *   "ok": true
+   * }
+   * 
+   * Error Responses:
+   * - 400 invalid_token: Token not found or invalid
+   * - 410 token_expired: Token has expired
+   * - 409 token_used: Token already consumed
+   * 
+   * Security:
+   * - Token is hashed before lookup (SHA-256)
+   * - Constant-time token comparison
+   * - Token marked as consumed (one-time use)
+   * - Password hashed with bcrypt before storage
+   * - Never logs passwords or tokens
+   */
+  async resetPassword(req, res) {
+    try {
+      const { token, newPassword } = req.body;
+      const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+
+      // Log attempt WITHOUT sensitive data
+      console.log(`[AuthController] Password reset attempt | IP: ${clientIp} | correlationId: ${req.correlationId}`);
+
+      // Perform password reset via AuthService
+      await this.authService.resetPassword(
+        this.userRepository,
+        token,
+        newPassword,
+        clientIp
+      );
+
+      // Success
+      console.log(`[AuthController] Password reset successful | IP: ${clientIp} | correlationId: ${req.correlationId}`);
+      
+      res.status(200).json({
+        ok: true
+      });
+
+    } catch (error) {
+      // Handle specific error codes
+      if (error.code && error.statusCode) {
+        console.log(`[AuthController] Password reset failed | code: ${error.code} | IP: ${req.ip} | correlationId: ${req.correlationId}`);
+        
+        return res.status(error.statusCode).json({
+          code: error.code,
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      // Log internal errors
+      console.error(`[AuthController] Password reset error | IP: ${req.ip} | correlationId: ${req.correlationId}`);
+
+      // Generic error for client
+      return res.status(500).json({
+        code: 'internal_error',
+        message: 'An error occurred while resetting your password',
+        correlationId: req.correlationId
+      });
+    }
+  }
 }
 
 module.exports = AuthController;

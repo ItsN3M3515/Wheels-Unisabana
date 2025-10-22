@@ -152,6 +152,45 @@ class MongoUserRepository extends UserRepository {
     );
   }
 
+  /**
+   * Find user by reset token hash
+   * 
+   * Includes password and all reset fields for token validation
+   * 
+   * @param {string} tokenHash - SHA-256 hash of the token
+   * @returns {Promise<Object|null>} - User document with reset fields or null
+   */
+  async findByResetToken(tokenHash) {
+    const doc = await UserModel.findOne({
+      resetPasswordToken: tokenHash
+    }).select('+password +resetPasswordToken +resetPasswordExpires +resetPasswordConsumed +passwordChangedAt');
+    
+    return doc ? User.fromDocument(doc) : null;
+  }
+
+  /**
+   * Update password and consume reset token
+   * 
+   * Sets new password hash, marks token as consumed, and updates passwordChangedAt
+   * 
+   * @param {string} userId - User ID
+   * @param {string} newPasswordHash - Bcrypt hash of new password
+   * @returns {Promise<void>}
+   */
+  async updatePasswordAndConsumeToken(userId, newPasswordHash) {
+    const now = new Date();
+    
+    await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        password: newPasswordHash,
+        resetPasswordConsumed: now,
+        passwordChangedAt: now
+      },
+      { runValidators: false } // Skip validators for system fields
+    );
+  }
+
   //Conversión de errores de Mongoose a formato details
   _formatValidationErrors(error) {
     return Object.keys(error.errors).map(field => ({ field, issue: error.errors[field].message }));

@@ -691,6 +691,181 @@
         }
       }
     },
+    "/auth/password/reset": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Reset password using token (out-of-session)",
+        "description": "Redeems a password reset token to set a new password.\n\n**Token Validation**:\n- Token is hashed (SHA-256) before lookup\n- Checked against database hash (constant-time comparison)\n- Must not be expired (15-minute window)\n- Must not be already consumed (one-time use)\n\n**Password Requirements**:\n- Minimum 8 characters\n- At least one uppercase letter\n- At least one lowercase letter\n- At least one number\n- At least one special character (@$!%*?&)\n\n**Security**:\n- New password is hashed with bcrypt before storage\n- Token is marked as consumed (one-time use)\n- passwordChangedAt timestamp is updated\n- All operations are logged without sensitive data\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "newPassword"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "Base64url-encoded token from reset email",
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "minLength": 43,
+                    "example": "abc123XYZ-_token_from_email_url"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "Strong password meeting complexity requirements",
+                    "example": "NewSecurePass123!"
+                  }
+                }
+              },
+              "examples": {
+                "valid": {
+                  "summary": "Valid reset request",
+                  "value": {
+                    "token": "k7n3R9xZ2pQ8vM5wL1jT4hG6fD0sA9cB2eN8uY7iO3qW5rT1xK4mP6vL2jH9gF0",
+                    "newPassword": "NewSecurePass123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid token or validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_schema",
+                        "invalid_token"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "invalid_token": {
+                    "summary": "Invalid or not found token",
+                    "value": {
+                      "code": "invalid_token",
+                      "message": "The reset link is invalid",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_schema": {
+                    "summary": "Validation error",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "newPassword",
+                          "issue": "newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Token already used",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "token_used"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "The reset link has already been used"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "token_used",
+                  "message": "The reset link has already been used",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Token expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "token_expired"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "The reset link has expired"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "token_expired",
+                  "message": "The reset link has expired",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/me": {
       "get": {
         "tags": [
