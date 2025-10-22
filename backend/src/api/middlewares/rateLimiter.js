@@ -14,8 +14,8 @@ const publicRateLimiter = rateLimit({
   standardHeaders: true, // Incluir headers de rate limit en response
   legacyHeaders: false, // Deshabilitar headers X-RateLimit-*
   skip: (req) => {
-    // Saltar rate limiting en desarrollo
-    return process.env.NODE_ENV === 'development';
+    // Saltar rate limiting en desarrollo y testing
+    return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
   }
 });
 
@@ -31,11 +31,41 @@ const generalRateLimiter = rateLimit({
     message: 'Too many requests, please try again later'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Saltar rate limiting en desarrollo y testing
+    return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  }
+});
+
+/**
+ * Rate limiter estricto para login
+ * 5 requests por minuto por IP
+ * Previene brute-force attacks
+ */
+const loginRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 5, // máximo 5 intentos de login por IP por ventana
+  message: {
+    code: 'too_many_attempts',
+    message: 'Too many login attempts, try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false, // Count all requests (success or fail)
+  keyGenerator: (req) => {
+    // Rate limit by IP
+    return req.ip;
+  },
+  skip: (req) => {
+    // Saltar rate limiting en desarrollo y testing
+    return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  }
 });
 
 module.exports = {
   publicRateLimiter,
-  generalRateLimiter
+  generalRateLimiter,
+  loginRateLimiter
 };
 

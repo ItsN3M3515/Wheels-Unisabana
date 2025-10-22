@@ -8,8 +8,8 @@ const vehicleSchema = new mongoose.Schema({
   driverId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'Driver ID is required'],
-    index: true
+    required: [true, 'Driver ID is required']
+    // Note: index is defined separately below as unique
   },
   plate: {
     type: String,
@@ -72,10 +72,11 @@ vehicleSchema.pre('save', function(next) {
   next();
 });
 
-// Index for fast driver lookup
-vehicleSchema.index({ driverId: 1 });
+// CRITICAL: Unique index on driverId to enforce one-vehicle-per-driver at DB level
+// This prevents race conditions even without transactions
+vehicleSchema.index({ driverId: 1 }, { unique: true });
 
-// Compound index for driver + plate uniqueness
+// Compound index for driver + plate uniqueness (additional safety)
 vehicleSchema.index({ driverId: 1, plate: 1 }, { unique: true });
 
 // Static method to check if driver has vehicle

@@ -16,71 +16,35 @@ class VehicleService {
 
   /**
    * Create a new vehicle for a driver
-   * @param {string} driverId - Driver ID from authentication
-   * @param {Object} vehicleData - Vehicle creation data
-   * @param {Object} files - Uploaded files (vehiclePhoto, soatPhoto)
+   * @param {CreateVehicleDto} createVehicleDto - Vehicle creation DTO
    * @returns {Promise<VehicleResponseDto>} - Created vehicle response
    * @throws {OneVehicleRuleError} - If driver already has a vehicle
    * @throws {DuplicatePlateError} - If plate already exists
    */
-  async createVehicle(driverId, vehicleData, files = {}) {
-    try {
-      // Check if driver already has a vehicle
-      const hasVehicle = await this.vehicleRepository.driverHasVehicle(driverId);
-      if (hasVehicle) {
-        throw new OneVehicleRuleError(
-          'Driver can only have one vehicle',
-          'one_vehicle_rule',
-          { driverId }
-        );
-      }
-
-      // Check if plate already exists
-      const plateExists = await this.vehicleRepository.plateExists(vehicleData.plate.toUpperCase());
-      if (plateExists) {
-        throw new DuplicatePlateError(
-          'Vehicle plate already exists',
-          'duplicate_plate',
-          { plate: vehicleData.plate }
-        );
-      }
-
-      // Handle image uploads
-      const vehiclePhotoUrl = files.vehiclePhoto ? `/uploads/vehicles/${files.vehiclePhoto.filename}` : null;
-      const soatPhotoUrl = files.soatPhoto ? `/uploads/vehicles/${files.soatPhoto.filename}` : null;
-
-      // Create vehicle DTO
-      const createVehicleDto = CreateVehicleDto.fromRequest(vehicleData, driverId);
-      createVehicleDto.vehiclePhotoUrl = vehiclePhotoUrl;
-      createVehicleDto.soatPhotoUrl = soatPhotoUrl;
-      createVehicleDto.validate();
-
-      // Create vehicle in repository
-      const vehicle = await this.vehicleRepository.create(createVehicleDto.toObject());
-      return VehicleResponseDto.fromEntity(vehicle);
-
-    } catch (error) {
-      // Cleanup uploaded files on error
-      const fs = require('fs').promises;
-      
-      if (files.vehiclePhoto && files.vehiclePhoto.path) {
-        try {
-          await fs.unlink(files.vehiclePhoto.path);
-        } catch (cleanupError) {
-          console.error('Error cleaning up vehicle photo:', cleanupError);
-        }
-      }
-
-      if (files.soatPhoto && files.soatPhoto.path) {
-        try {
-          await fs.unlink(files.soatPhoto.path);
-        } catch (cleanupError) {
-          console.error('Error cleaning up SOAT photo:', cleanupError);
-        }
-      }
-
-      throw error;
+  async createVehicle(createVehicleDto) {
+    // Check if driver already has a vehicle
+    const hasVehicle = await this.vehicleRepository.driverHasVehicle(createVehicleDto.driverId);
+    if (hasVehicle) {
+      throw new OneVehicleRuleError(
+        'Driver can only have one vehicle',
+        'one_vehicle_rule',
+        { driverId: createVehicleDto.driverId }
+      );
     }
+
+    // Check if plate already exists
+    const plateExists = await this.vehicleRepository.plateExists(createVehicleDto.plate);
+    if (plateExists) {
+      throw new DuplicatePlateError(
+        'Vehicle plate already exists',
+        'duplicate_plate',
+        { plate: createVehicleDto.plate }
+      );
+    }
+
+    // Create vehicle in repository
+    const vehicle = await this.vehicleRepository.create(createVehicleDto.toObject());
+    return VehicleResponseDto.fromEntity(vehicle);
   }
 
   /**
@@ -96,83 +60,45 @@ class VehicleService {
   /**
    * Update vehicle by driver ID
    * @param {string} driverId - Driver ID
-   * @param {Object} updates - Vehicle update data
-   * @param {Object} files - Uploaded files (vehiclePhoto, soatPhoto)
+   * @param {UpdateVehicleDto} updateVehicleDto - Vehicle update DTO
    * @returns {Promise<VehicleResponseDto|null>} - Updated vehicle response or null
    */
-  async updateVehicle(driverId, updates, files = {}) {
-    try {
-      // Check if vehicle exists
-      const existingVehicle = await this.vehicleRepository.findByDriverId(driverId);
-      if (!existingVehicle) {
-        return null;
-      }
-
-      // Create update DTO
-      const updateVehicleDto = UpdateVehicleDto.fromRequest(updates);
-      updateVehicleDto.validate();
-
-      const updateData = updateVehicleDto.toObject();
-
-      // Handle image updates
-      if (files.vehiclePhoto) {
-        updateData.vehiclePhotoUrl = `/uploads/vehicles/${files.vehiclePhoto.filename}`;
-        
-        // Delete old photo if exists
-        if (existingVehicle.vehiclePhotoUrl) {
-          const fs = require('fs').promises;
-          const path = require('path');
-          const oldPath = path.join(__dirname, '../../../', existingVehicle.vehiclePhotoUrl);
-          try {
-            await fs.unlink(oldPath);
-          } catch (err) {
-            console.error('Error deleting old vehicle photo:', err);
-          }
-        }
-      }
-
-      if (files.soatPhoto) {
-        updateData.soatPhotoUrl = `/uploads/vehicles/${files.soatPhoto.filename}`;
-        
-        // Delete old photo if exists
-        if (existingVehicle.soatPhotoUrl) {
-          const fs = require('fs').promises;
-          const path = require('path');
-          const oldPath = path.join(__dirname, '../../../', existingVehicle.soatPhotoUrl);
-          try {
-            await fs.unlink(oldPath);
-          } catch (err) {
-            console.error('Error deleting old SOAT photo:', err);
-          }
-        }
-      }
-
-      // Update vehicle
-      const updatedVehicle = await this.vehicleRepository.updateByDriverId(driverId, updateData);
-      return updatedVehicle ? VehicleResponseDto.fromEntity(updatedVehicle) : null;
-
-    } catch (error) {
-      // Cleanup uploaded files on error
-      const fs = require('fs').promises;
-      
-      if (files.vehiclePhoto && files.vehiclePhoto.path) {
-        try {
-          await fs.unlink(files.vehiclePhoto.path);
-        } catch (cleanupError) {
-          console.error('Error cleaning up vehicle photo:', cleanupError);
-        }
-      }
-
-      if (files.soatPhoto && files.soatPhoto.path) {
-        try {
-          await fs.unlink(files.soatPhoto.path);
-        } catch (cleanupError) {
-          console.error('Error cleaning up SOAT photo:', cleanupError);
-        }
-      }
-
-      throw error;
+  async updateVehicle(driverId, updateVehicleDto) {
+    // Check if vehicle exists
+    const existingVehicle = await this.vehicleRepository.findByDriverId(driverId);
+    if (!existingVehicle) {
+      return null;
     }
+
+    // Get update data
+    const updateData = updateVehicleDto.toObject();
+
+    // Delete old photos if new ones are provided
+    if (updateData.vehiclePhotoUrl && existingVehicle.vehiclePhotoUrl) {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const oldPath = path.join(__dirname, '../../../', existingVehicle.vehiclePhotoUrl);
+      try {
+        await fs.unlink(oldPath);
+      } catch (err) {
+        console.error('Error deleting old vehicle photo:', err);
+      }
+    }
+
+    if (updateData.soatPhotoUrl && existingVehicle.soatPhotoUrl) {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const oldPath = path.join(__dirname, '../../../', existingVehicle.soatPhotoUrl);
+      try {
+        await fs.unlink(oldPath);
+      } catch (err) {
+        console.error('Error deleting old SOAT photo:', err);
+      }
+    }
+
+    // Update vehicle
+    const updatedVehicle = await this.vehicleRepository.updateByDriverId(driverId, updateData);
+    return updatedVehicle ? VehicleResponseDto.fromEntity(updatedVehicle) : null;
   }
 
   /**

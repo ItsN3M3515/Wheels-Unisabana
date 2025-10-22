@@ -2,19 +2,35 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Crear directorio de uploads si no existe
-const uploadDir = process.env.UPLOAD_DIR || 'uploads/profiles';
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Crear directorios de uploads si no existen
+const uploadBaseDir = process.env.UPLOAD_DIR || 'uploads';
+const profileUploadDir = `${uploadBaseDir}/profiles`;
+const vehicleUploadDir = `${uploadBaseDir}/vehicles`;
 
-// Configuración de storage para Multer
-const storage = multer.diskStorage({
+[profileUploadDir, vehicleUploadDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
+
+// Configuración de storage para perfiles de usuario
+const profileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir);
+    cb(null, profileUploadDir);
   },
   filename: (req, file, cb) => {
-    // Generar nombre único: timestamp-random.extension
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+  }
+});
+
+// Configuración de storage para vehículos
+const vehicleStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, vehicleUploadDir);
+  },
+  filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
     cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
@@ -32,12 +48,21 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configuración de Multer
+// Configuración de Multer para perfiles
 const upload = multer({
-  storage: storage,
+  storage: profileStorage,
   fileFilter: fileFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_PROFILE_PHOTO_MB || '5') * 1024 * 1024 // 5MB por defecto
+  }
+});
+
+// Configuración de Multer para vehículos (soporta múltiples archivos)
+const vehicleUpload = multer({
+  storage: vehicleStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: parseInt(process.env.MAX_VEHICLE_PHOTO_MB || process.env.MAX_SOAT_PHOTO_MB || '5') * 1024 * 1024 // 5MB por defecto
   }
 });
 
@@ -72,30 +97,73 @@ const handleUploadError = (err, req, res, next) => {
   next(err);
 };
 
-// Middleware para cleanup automático en caso de error
+/**
+ * Middleware para cleanup automático de archivos en caso de error
+ * Maneja tanto req.file (único) como req.files (múltiples)
+ */
 const cleanupOnError = async (req, res, next) => {
-  // Si hay archivo subido, limpiarlo en caso de error
-  if (req.file && req.file.path) {
-    const originalSend = res.send;
-    res.send = function(data) {
-      // Si la respuesta es exitosa (2xx), no limpiar
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        return originalSend.call(this, data);
+  const originalSend = res.send;
+  const originalJson = res.json;
+  
+  /**
+   * Función helper para limpiar archivos
+   */
+  const cleanupFiles = () => {
+    // Solo limpiar si hay error (status >= 400)
+    if (res.statusCode < 400) {
+      return;
+    }
+
+    const filesToClean = [];
+
+    // Manejar archivo único (req.file)
+    if (req.file && req.file.path) {
+      filesToClean.push(req.file.path);
+    }
+
+    // Manejar múltiples archivos (req.files)
+    if (req.files) {
+      // req.files puede ser un array o un objeto con arrays
+      if (Array.isArray(req.files)) {
+        // Array de archivos
+        filesToClean.push(...req.files.map(f => f.path));
+      } else {
+        // Objeto con campos de archivos (ej: { vehiclePhoto: [...], soatPhoto: [...] })
+        Object.values(req.files).forEach(fileArray => {
+          if (Array.isArray(fileArray)) {
+            filesToClean.push(...fileArray.map(f => f.path));
+          }
+        });
       }
-      
-      // Si hay error, limpiar archivo
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Error deleting temp file:', err);
+    }
+
+    // Eliminar archivos
+    filesToClean.forEach(filePath => {
+      fs.unlink(filePath, (err) => {
+        if (err) console.error(`Error deleting temp file ${filePath}:`, err);
+        else console.log(`Cleaned up temp file: ${filePath}`);
       });
-      return originalSend.call(this, data);
-    };
-  }
+    });
+  };
+
+  // Interceptar res.send
+  res.send = function(data) {
+    cleanupFiles();
+    return originalSend.call(this, data);
+  };
+
+  // Interceptar res.json
+  res.json = function(data) {
+    cleanupFiles();
+    return originalJson.call(this, data);
+  };
   
   next();
 };
 
 module.exports = {
   upload,
+  vehicleUpload,
   handleUploadError,
   cleanupOnError
 };

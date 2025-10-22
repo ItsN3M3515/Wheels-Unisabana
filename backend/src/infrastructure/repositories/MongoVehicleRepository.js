@@ -55,6 +55,37 @@ class MongoVehicleRepository extends VehicleRepository {
       if (error instanceof OneVehicleRuleError || error instanceof DuplicatePlateError) {
         throw error;
       }
+      
+      // Handle MongoDB unique constraint violations (E11000)
+      if (error.code === 11000 || error.name === 'MongoServerError') {
+        const keyPattern = error.keyPattern || {};
+        const keyValue = error.keyValue || {};
+        
+        // Check which unique constraint was violated
+        if (keyPattern.driverId) {
+          throw new OneVehicleRuleError(
+            'Driver can only have one vehicle',
+            'one_vehicle_rule',
+            { driverId: keyValue.driverId }
+          );
+        }
+        
+        if (keyPattern.plate) {
+          throw new DuplicatePlateError(
+            'Vehicle plate already exists',
+            'duplicate_plate',
+            { plate: keyValue.plate }
+          );
+        }
+        
+        // Generic duplicate error
+        throw new DuplicatePlateError(
+          'Duplicate vehicle data',
+          'duplicate_vehicle',
+          { keys: Object.keys(keyPattern) }
+        );
+      }
+      
       if (error.name === 'ValidationError') {
         throw new ValidationError('Invalid vehicle data', 'invalid_schema', this._formatValidationErrors(error));
       }

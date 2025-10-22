@@ -1,0 +1,387 @@
+openapi: 3.0.3
+info:
+  title: Wheels-Unisabana API
+  version: 1.0.0
+  description: API para el sistema de carpooling de la Universidad de La Sabana
+  contact:
+    name: Wheels-Unisabana Team
+    email: support@wheels-unisabana.edu.co
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:3000
+    description: Development server
+tags:
+  - name: System
+    description: Endpoints del sistema
+  - name: Users
+    description: Gestión de usuarios
+  - name: Vehicles
+    description: Gestión de vehículos (drivers)
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: JWT stored in httpOnly cookie
+  schemas:
+    ErrorValidation:
+      type: object
+      properties:
+        code:
+          type: string
+          example: invalid_schema
+        message:
+          type: string
+          example: Validation failed
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: firstName
+              issue:
+                type: string
+                example: min length 2
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorConflict:
+      type: object
+      properties:
+        code:
+          type: string
+          example: duplicate_email
+        message:
+          type: string
+          example: corporateEmail already exists
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorUnauthorized:
+      type: object
+      properties:
+        code:
+          type: string
+          example: unauthorized
+        message:
+          type: string
+          example: Missing or invalid session
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorForbidden:
+      type: object
+      properties:
+        code:
+          type: string
+          example: immutable_field
+        message:
+          type: string
+          example: One or more fields cannot be updated
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: corporateEmail
+              issue:
+                type: string
+                example: immutable
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    ErrorPayloadTooLarge:
+      type: object
+      properties:
+        code:
+          type: string
+          example: payload_too_large
+        message:
+          type: string
+          example: File exceeds limit
+        correlationId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+    UserResponseDto:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 665e2a...f1
+        role:
+          type: string
+          enum:
+            - passenger
+            - driver
+          example: passenger
+        firstName:
+          type: string
+          example: Ana
+        lastName:
+          type: string
+          example: Ruiz
+        universityId:
+          type: string
+          example: '202420023'
+        corporateEmail:
+          type: string
+          format: email
+          example: aruiz@unisabana.edu.co
+        phone:
+          type: string
+          example: '+573001112233'
+        profilePhotoUrl:
+          type: string
+          nullable: true
+          example: https://cdn.example/u/665e2a/avatar.jpg
+        driver:
+          type: object
+          nullable: true
+          properties:
+            hasVehicle:
+              type: boolean
+              example: false
+          description: Only present for role=driver
+    UpdateProfileRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: Ana María
+        lastName:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: Ruiz García
+        phone:
+          type: string
+          pattern: ^\+[1-9]\d{1,14}$
+          example: '+573001112233'
+      description: At least one field required
+paths:
+  /api/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get my profile
+      description: |
+        Returns the authenticated user's profile with sanitized data.
+        For drivers, includes `driver.hasVehicle` computed dynamically.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+              examples:
+                passenger:
+                  summary: Passenger profile
+                  value:
+                    id: 665e2a...f1
+                    role: passenger
+                    firstName: Ana
+                    lastName: Ruiz
+                    universityId: '202420023'
+                    corporateEmail: aruiz@unisabana.edu.co
+                    phone: '+573001112233'
+                    profilePhotoUrl: https://cdn.example/u/665e2a/avatar.jpg
+                driver:
+                  summary: Driver profile with vehicle status
+                  value:
+                    id: 665e2a...f2
+                    role: driver
+                    firstName: Carlos
+                    lastName: Gómez
+                    universityId: '202420024'
+                    corporateEmail: cgomez@unisabana.edu.co
+                    phone: '+573004445566'
+                    profilePhotoUrl: null
+                    driver:
+                      hasVehicle: true
+        '401':
+          description: Unauthorized - Missing or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+              examples:
+                missingToken:
+                  summary: No access_token cookie
+                  value:
+                    code: unauthorized
+                    message: Missing or invalid session
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                expiredToken:
+                  summary: Token expired
+                  value:
+                    code: token_expired
+                    message: Session expired
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+    patch:
+      tags:
+        - Users
+      summary: Update my profile (partial)
+      description: |
+        Update authenticated user's profile. Supports JSON and multipart/form-data.
+
+        **Allowed fields**: `firstName`, `lastName`, `phone`, `profilePhoto` (file)
+        **Immutable fields** (403): `corporateEmail`, `universityId`, `role`, `id`, `password`
+
+        Photo replacement is atomic: old photo deleted only after successful update.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            examples:
+              updateName:
+                summary: Update first name only
+                value:
+                  firstName: Ana María
+              updatePhone:
+                summary: Update phone only
+                value:
+                  phone: '+573001112244'
+              updateMultiple:
+                summary: Update multiple fields
+                value:
+                  firstName: Ana María
+                  lastName: Ruiz García
+                  phone: '+573001112244'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                  minLength: 2
+                  maxLength: 50
+                lastName:
+                  type: string
+                  minLength: 2
+                  maxLength: 50
+                phone:
+                  type: string
+                  pattern: ^\\+[1-9]\\d{1,14}$
+                profilePhoto:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG, or WebP image (max 5MB)
+            examples:
+              withPhoto:
+                summary: Update with new profile photo
+                value:
+                  firstName: Ana María
+                  profilePhoto: (binary file data)
+              photoOnly:
+                summary: Replace photo without other changes
+                value:
+                  profilePhoto: (binary file data)
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponseDto'
+              examples:
+                updated:
+                  summary: Updated profile
+                  value:
+                    id: 665e2a...f1
+                    role: passenger
+                    firstName: Ana María
+                    lastName: Ruiz
+                    universityId: '202420023'
+                    corporateEmail: aruiz@unisabana.edu.co
+                    phone: '+573001112244'
+                    profilePhotoUrl: /uploads/profiles/profilePhoto-1701010101010-123.jpg
+        '400':
+          description: Validation error or unknown field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorValidation'
+              examples:
+                validationFailed:
+                  summary: Invalid field format
+                  value:
+                    code: invalid_schema
+                    message: Validation failed
+                    details:
+                      - field: firstName
+                        issue: firstName length must be at least 2 characters long
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                unknownField:
+                  summary: Unknown field provided
+                  value:
+                    code: invalid_schema
+                    message: Unknown fields provided
+                    details:
+                      - field: unknownField
+                        issue: unknown field
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                invalidFileType:
+                  summary: Invalid MIME type
+                  value:
+                    code: invalid_file_type
+                    message: Unsupported MIME type
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '401':
+          description: Unauthorized - Missing or invalid session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnauthorized'
+        '403':
+          description: Forbidden - Attempt to modify immutable field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorForbidden'
+              examples:
+                immutableField:
+                  summary: Attempt to change corporateEmail
+                  value:
+                    code: immutable_field
+                    message: One or more fields cannot be updated
+                    details:
+                      - field: corporateEmail
+                        issue: immutable
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+                multipleImmutable:
+                  summary: Multiple immutable fields
+                  value:
+                    code: immutable_field
+                    message: One or more fields cannot be updated
+                    details:
+                      - field: corporateEmail
+                        issue: immutable
+                      - field: role
+                        issue: immutable
+                    correlationId: 123e4567-e89b-12d3-a456-426614174000
+        '413':
+          description: Payload too large - File exceeds size limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayloadTooLarge'
+              example:
+                code: payload_too_large
+                message: File exceeds limit
+                correlationId: 123e4567-e89b-12d3-a456-426614174000

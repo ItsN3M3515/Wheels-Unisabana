@@ -68,7 +68,55 @@ const createUserSchema = Joi.object({
     })
 });
 
+/**
+ * Schema para validación de actualización parcial de perfil
+ * Solo permite campos de la allow-list: firstName, lastName, phone
+ * Campos inmutables (corporateEmail, universityId, role) son rechazados en el controller
+ * 
+ * NOTA: NO usamos stripUnknown aquí porque necesitamos que los campos inmutables
+ * lleguen al controller para generar el error 403 correspondiente.
+ * 
+ * NOTA 2: profilePhoto es manejado por multer (req.file), no por Joi (req.body).
+ * Por lo tanto, si solo se sube foto sin campos de texto, req.body estará vacío
+ * y eso es válido (el controller verificará req.file).
+ */
+const updateProfileSchema = Joi.object({
+  firstName: Joi.string()
+    .trim()
+    .min(2)
+    .max(50)
+    .optional()
+    .messages({
+      'string.min': 'First name must be at least 2 characters',
+      'string.max': 'First name must not exceed 50 characters'
+    }),
+    
+  lastName: Joi.string()
+    .trim()
+    .min(2)
+    .max(50)
+    .optional()
+    .messages({
+      'string.min': 'Last name must be at least 2 characters',
+      'string.max': 'Last name must not exceed 50 characters'
+    }),
+    
+  phone: Joi.string()
+    .pattern(/^\+[1-9]\d{1,14}$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'Phone must be in E.164 format (+country code + number)'
+    })
+})
+  // NO enforceamos .min(1) aquí porque profilePhoto puede ser el único cambio
+  // y eso viene en req.file, no en req.body
+  .unknown(true) // Permitir campos desconocidos (serán validados en controller)
+  .options({
+    abortEarly: false   // Reportar todos los errores
+  });
+
 module.exports = {
-  createUserSchema
+  createUserSchema,
+  updateProfileSchema
 };
 

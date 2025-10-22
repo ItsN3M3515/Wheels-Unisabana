@@ -40,6 +40,28 @@ class CreateVehicleDto {
   }
 
   /**
+   * Create DTO from multipart/form-data request
+   * @param {Object} fields - Form fields from request body
+   * @param {Object} files - Uploaded files { vehiclePhoto, soatPhoto }
+   * @param {string} driverId - Driver ID from authentication
+   * @returns {CreateVehicleDto} - DTO instance
+   */
+  static fromMultipart(fields, files, driverId) {
+    const vehiclePhotoUrl = files?.vehiclePhoto ? `/uploads/vehicles/${files.vehiclePhoto.filename}` : null;
+    const soatPhotoUrl = files?.soatPhoto ? `/uploads/vehicles/${files.soatPhoto.filename}` : null;
+
+    return new CreateVehicleDto({
+      driverId,
+      plate: fields.plate,
+      brand: fields.brand,
+      model: fields.model,
+      capacity: parseInt(fields.capacity),
+      vehiclePhotoUrl,
+      soatPhotoUrl
+    });
+  }
+
+  /**
    * Validate DTO data
    * @throws {ValidationError} - If validation fails
    */

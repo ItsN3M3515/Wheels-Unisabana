@@ -33,6 +33,25 @@ class UpdateVehicleDto {
   }
 
   /**
+   * Create DTO from multipart/form-data request
+   * @param {Object} fields - Form fields from request body
+   * @param {Object} files - Uploaded files { vehiclePhoto, soatPhoto }
+   * @returns {UpdateVehicleDto} - DTO instance
+   */
+  static fromMultipart(fields, files) {
+    const vehiclePhotoUrl = files?.vehiclePhoto ? `/uploads/vehicles/${files.vehiclePhoto.filename}` : undefined;
+    const soatPhotoUrl = files?.soatPhoto ? `/uploads/vehicles/${files.soatPhoto.filename}` : undefined;
+
+    return new UpdateVehicleDto({
+      brand: fields.brand,
+      model: fields.model,
+      capacity: fields.capacity ? parseInt(fields.capacity) : undefined,
+      vehiclePhotoUrl,
+      soatPhotoUrl
+    });
+  }
+
+  /**
    * Validate DTO data
    * @throws {ValidationError} - If validation fails
    */

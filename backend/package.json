@@ -40,6 +40,8 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "axios": "^1.12.2",
+    "form-data": "^4.0.4",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "supertest": "^6.3.4"
