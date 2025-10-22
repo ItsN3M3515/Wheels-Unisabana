@@ -400,6 +400,94 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * PATCH /auth/password
+   * 
+   * Changes authenticated user's password (in-session)
+   * 
+   * Request Body:
+   * {
+   *   "currentPassword": "OldSecret123",
+   *   "newPassword": "CorrectHorseBatteryStaple!"
+   * }
+   * 
+   * Response 200 (Success):
+   * {
+   *   "ok": true
+   * }
+   * 
+   * Error Responses:
+   * - 401 invalid_credentials: Current password is incorrect
+   * - 400 invalid_schema: Validation error (weak password)
+   * 
+   * Security:
+   * - Requires authentication (JWT cookie)
+   * - Current password verified with bcrypt
+   * - New password hashed before storage
+   * - Never logs passwords
+   * 
+   * Note: Requires authenticate middleware
+   */
+  async changePassword(req, res) {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const userId = req.user?.id || req.user?.sub;
+      const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+
+      // Verify user is authenticated (should be guaranteed by middleware)
+      if (!userId) {
+        console.error(`[AuthController] Password change without userId | correlationId: ${req.correlationId}`);
+        return res.status(401).json({
+          code: 'unauthorized',
+          message: 'Authentication required',
+          correlationId: req.correlationId
+        });
+      }
+
+      // Log attempt WITHOUT passwords
+      console.log(`[AuthController] Password change attempt | userId: ${userId} | IP: ${clientIp} | correlationId: ${req.correlationId}`);
+
+      // Perform password change via AuthService
+      await this.authService.changePassword(
+        this.userRepository,
+        userId,
+        currentPassword,
+        newPassword,
+        clientIp
+      );
+
+      // Success
+      console.log(`[AuthController] Password changed successfully | userId: ${userId} | IP: ${clientIp} | correlationId: ${req.correlationId}`);
+      
+      res.status(200).json({
+        ok: true
+      });
+
+    } catch (error) {
+      // Handle specific error codes
+      if (error.code && error.statusCode) {
+        const userId = req.user?.id || req.user?.sub || 'unknown';
+        console.log(`[AuthController] Password change failed | userId: ${userId} | code: ${error.code} | IP: ${req.ip} | correlationId: ${req.correlationId}`);
+        
+        return res.status(error.statusCode).json({
+          code: error.code,
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      // Log internal errors
+      console.error(`[AuthController] Password change error | IP: ${req.ip} | correlationId: ${req.correlationId}`);
+
+      // Generic error for client
+      return res.status(500).json({
+        code: 'internal_error',
+        message: 'An error occurred while changing your password',
+        correlationId: req.correlationId
+      });
+    }
+  }
 }
 
 module.exports = AuthController;

@@ -191,6 +191,28 @@ class MongoUserRepository extends UserRepository {
     );
   }
 
+  /**
+   * Update user password (in-session password change)
+   * 
+   * Updates password hash and passwordChangedAt timestamp
+   * 
+   * @param {string} userId - User ID
+   * @param {string} newPasswordHash - Bcrypt hash of new password
+   * @returns {Promise<void>}
+   */
+  async updatePassword(userId, newPasswordHash) {
+    const now = new Date();
+    
+    await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        password: newPasswordHash,
+        passwordChangedAt: now
+      },
+      { runValidators: false } // Skip validators for system fields
+    );
+  }
+
   //Conversión de errores de Mongoose a formato details
   _formatValidationErrors(error) {
     return Object.keys(error.errors).map(field => ({ field, issue: error.errors[field].message }));

@@ -866,6 +866,144 @@
         }
       }
     },
+    "/auth/password": {
+      "patch": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Change password (in-session, authenticated)",
+        "description": "Allows authenticated users to change their password by providing\ncurrent password and a new strong password.\n\n**Authentication Required**: Must have valid JWT cookie from /auth/login\n\n**Password Verification**:\n- Current password verified with bcrypt (timing-safe)\n- If current password wrong → 401 invalid_credentials\n\n**New Password Requirements**:\n- Minimum 8 characters\n- At least one uppercase letter\n- At least one lowercase letter\n- At least one number\n- At least one special character (@$!%*?&)\n\n**Security**:\n- New password hashed with bcrypt before storage\n- passwordChangedAt timestamp updated\n- All operations logged without passwords\n- Session remains valid after password change\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Current password for verification",
+                    "example": "OldSecret123"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 8,
+                    "maxLength": 128,
+                    "description": "New strong password meeting complexity requirements",
+                    "example": "CorrectHorseBatteryStaple!"
+                  }
+                }
+              },
+              "examples": {
+                "valid": {
+                  "summary": "Valid password change",
+                  "value": {
+                    "currentPassword": "OldSecret123",
+                    "newPassword": "NewSecurePass123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    }
+                  }
+                },
+                "example": {
+                  "ok": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error (weak new password)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "example": {
+                  "code": "invalid_schema",
+                  "message": "Validation failed",
+                  "details": [
+                    {
+                      "field": "newPassword",
+                      "issue": "newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+                    }
+                  ],
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed or current password incorrect",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "unauthorized",
+                        "invalid_credentials"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "invalid_credentials": {
+                    "summary": "Wrong current password",
+                    "value": {
+                      "code": "invalid_credentials",
+                      "message": "Email or password is incorrect",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "unauthorized": {
+                    "summary": "Not authenticated",
+                    "value": {
+                      "code": "unauthorized",
+                      "message": "Authentication required",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/users/me": {
       "get": {
         "tags": [

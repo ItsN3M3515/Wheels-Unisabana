@@ -115,9 +115,57 @@ const passwordResetSchema = Joi.object({
   stripUnknown: true
 });
 
+/**
+ * Password Change Schema (In-session)
+ * 
+ * Fields:
+ * - currentPassword: Current password for verification (required)
+ * - newPassword: Strong new password, min 8 chars (required)
+ * 
+ * Password Requirements (newPassword):
+ * - Minimum 8 characters
+ * - At least one uppercase letter
+ * - At least one lowercase letter
+ * - At least one number
+ * - At least one special character
+ * 
+ * Error Codes:
+ * - 401 invalid_credentials: Current password is incorrect
+ * - 400 invalid_schema: Validation failed (weak password)
+ * 
+ * Note: Requires authentication (JWT cookie)
+ */
+const passwordChangeSchema = Joi.object({
+  currentPassword: Joi.string()
+    .required()
+    .min(1)  // Just verify it's not empty, actual verification happens in service
+    .messages({
+      'any.required': 'currentPassword is required',
+      'string.empty': 'currentPassword cannot be empty',
+      'string.min': 'currentPassword cannot be empty'
+    }),
+  
+  newPassword: Joi.string()
+    .min(8)
+    .max(128)
+    .required()
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .messages({
+      'string.min': 'newPassword must be at least 8 characters long',
+      'string.max': 'newPassword must not exceed 128 characters',
+      'string.pattern.base': 'newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)',
+      'any.required': 'newPassword is required',
+      'string.empty': 'newPassword cannot be empty'
+    })
+}).options({
+  abortEarly: false,
+  stripUnknown: true
+});
+
 module.exports = {
   loginSchema,
   passwordResetRequestSchema,
-  passwordResetSchema
+  passwordResetSchema,
+  passwordChangeSchema
 };
 

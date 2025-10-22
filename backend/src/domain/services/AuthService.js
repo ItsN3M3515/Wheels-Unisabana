@@ -412,6 +412,85 @@ class AuthService {
   }
 
   /**
+   * Change Password (In-session)
+   * 
+   * Allows authenticated users to change their password by verifying
+   * current password and setting a new one.
+   * 
+   * Validation Steps:
+   * 1. Find user by ID (from authenticated session)
+   * 2. Verify current password matches stored hash
+   * 3. Hash new password with bcrypt
+   * 4. Update password and passwordChangedAt
+   * 
+   * @param {Object} userRepository - Repository for user operations
+   * @param {string} userId - User ID from authenticated session
+   * @param {string} currentPassword - Current plaintext password
+   * @param {string} newPassword - New plaintext password
+   * @param {string} clientIp - Client IP for logging
+   * @returns {Promise<Object>} - { success: true }
+   * @throws {Error} - invalid_credentials (401) if current password wrong
+   * 
+   * Security:
+   * - Never logs passwords
+   * - Uses bcrypt.compare for timing-safe comparison
+   * - Updates passwordChangedAt timestamp
+   * - Logs security events without PII
+   */
+  async changePassword(userRepository, userId, currentPassword, newPassword, clientIp = 'unknown') {
+    try {
+      // 1. Find user by ID (with password hash)
+      const user = await userRepository.findById(userId);
+      
+      if (!user) {
+        console.log(`[AuthService] Password change failed | userId: ${userId} | reason: user_not_found | ip: ${clientIp}`);
+        const error = new Error('Email or password is incorrect');
+        error.code = 'invalid_credentials';
+        error.statusCode = 401;
+        throw error;
+      }
+
+      // 2. Verify current password
+      const isValidPassword = await this.verifyPassword(currentPassword, user.password);
+      
+      if (!isValidPassword) {
+        console.log(`[AuthService] Password change failed | userId: ${userId} | reason: invalid_current_password | ip: ${clientIp}`);
+        const error = new Error('Email or password is incorrect');
+        error.code = 'invalid_credentials';
+        error.statusCode = 401;
+        throw error;
+      }
+
+      // 3. Hash new password
+      const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
+      const newPasswordHash = await bcrypt.hash(newPassword, bcryptRounds);
+
+      // 4. Update password
+      await userRepository.updatePassword(userId, newPasswordHash);
+
+      // Log success WITHOUT passwords
+      console.log(`[AuthService] Password changed successfully | userId: ${userId} | ip: ${clientIp}`);
+
+      return { success: true };
+
+    } catch (error) {
+      // Re-throw known errors (invalid_credentials)
+      if (error.code && error.statusCode) {
+        throw error;
+      }
+
+      // Log unexpected errors WITHOUT sensitive data
+      console.error('[AuthService] Password change failed (internal error):', error.message);
+
+      // Generic error for client
+      const genericError = new Error('Failed to change password');
+      genericError.code = 'password_change_error';
+      genericError.statusCode = 500;
+      throw genericError;
+    }
+  }
+
+  /**
    * Get JWT configuration (for testing/debugging)
    * 
    * @returns {Object} - { expiresIn, issuer, audience }

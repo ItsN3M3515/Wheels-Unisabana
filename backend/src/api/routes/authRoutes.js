@@ -1,7 +1,7 @@
 const express = require('express');
 const AuthController = require('../controllers/authController');
 const validateRequest = require('../middlewares/validateRequest');
-const { loginSchema, passwordResetRequestSchema, passwordResetSchema } = require('../validation/authSchemas');
+const { loginSchema, passwordResetRequestSchema, passwordResetSchema, passwordChangeSchema } = require('../validation/authSchemas');
 const { loginRateLimiter, passwordResetRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
 
@@ -545,6 +545,126 @@ router.post(
   '/password/reset',
   validateRequest(passwordResetSchema),
   authController.resetPassword.bind(authController)
+);
+
+/**
+ * @openapi
+ * /auth/password:
+ *   patch:
+ *     tags:
+ *       - Authentication
+ *     summary: Change password (in-session, authenticated)
+ *     description: |
+ *       Allows authenticated users to change their password by providing
+ *       current password and a new strong password.
+ *       
+ *       **Authentication Required**: Must have valid JWT cookie from /auth/login
+ *       
+ *       **Password Verification**:
+ *       - Current password verified with bcrypt (timing-safe)
+ *       - If current password wrong → 401 invalid_credentials
+ *       
+ *       **New Password Requirements**:
+ *       - Minimum 8 characters
+ *       - At least one uppercase letter
+ *       - At least one lowercase letter
+ *       - At least one number
+ *       - At least one special character (@$!%*?&)
+ *       
+ *       **Security**:
+ *       - New password hashed with bcrypt before storage
+ *       - passwordChangedAt timestamp updated
+ *       - All operations logged without passwords
+ *       - Session remains valid after password change
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *                 format: password
+ *                 description: Current password for verification
+ *                 example: "OldSecret123"
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *                 maxLength: 128
+ *                 description: New strong password meeting complexity requirements
+ *                 example: "CorrectHorseBatteryStaple!"
+ *           examples:
+ *             valid:
+ *               summary: Valid password change
+ *               value:
+ *                 currentPassword: "OldSecret123"
+ *                 newPassword: "NewSecurePass123!"
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *             example:
+ *               ok: true
+ *       400:
+ *         description: Validation error (weak new password)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidation'
+ *             example:
+ *               code: "invalid_schema"
+ *               message: "Validation failed"
+ *               details:
+ *                 - field: "newPassword"
+ *                   issue: "newPassword must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+ *               correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *       401:
+ *         description: Authentication failed or current password incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   enum: [unauthorized, invalid_credentials]
+ *                 message:
+ *                   type: string
+ *                 correlationId:
+ *                   type: string
+ *             examples:
+ *               invalid_credentials:
+ *                 summary: Wrong current password
+ *                 value:
+ *                   code: "invalid_credentials"
+ *                   message: "Email or password is incorrect"
+ *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *               unauthorized:
+ *                 summary: Not authenticated
+ *                 value:
+ *                   code: "unauthorized"
+ *                   message: "Authentication required"
+ *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ */
+router.patch(
+  '/password',
+  authenticate,  // Require authentication
+  validateRequest(passwordChangeSchema),
+  authController.changePassword.bind(authController)
 );
 
 module.exports = router;
