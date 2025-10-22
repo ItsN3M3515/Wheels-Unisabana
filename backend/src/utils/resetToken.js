@@ -121,22 +121,58 @@ class ResetTokenUtil {
   /**
    * Generate and hash a reset token (convenience method)
    * 
-   * @returns {Object} - { token, tokenHash, expiresAt }
+   * Generates a cryptographically secure token with hash and expiry.
+   * This is the primary method for creating password reset tokens.
+   * 
+   * @param {number} expiryMinutes - Minutes until expiration (default: 15)
+   * @returns {Object} - { tokenPlain, tokenHash, expiresAt }
    * 
    * Usage:
-   * const { token, tokenHash, expiresAt } = ResetTokenUtil.createResetToken();
-   * // Send `token` to user via email
+   * const { tokenPlain, tokenHash, expiresAt } = ResetTokenUtil.generateResetToken();
+   * // Send `tokenPlain` to user via email
    * // Store `tokenHash` and `expiresAt` in database
+   * 
+   * Returns:
+   * - tokenPlain: URL-safe base64 string (43 chars) - send to user
+   * - tokenHash: SHA-256 hex string (64 chars) - store in database
+   * - expiresAt: Date object - store in database
    */
-  static createResetToken(expiryMinutes = 15) {
-    const token = this.generateToken();
-    const tokenHash = this.hashToken(token);
+  static generateResetToken(expiryMinutes = 15) {
+    // Generate secure random token (32 bytes)
+    const buf = crypto.randomBytes(32);
+    
+    // Convert to URL-safe base64
+    const tokenPlain = buf
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+
+    // Hash for storage
+    const tokenHash = this.hashToken(tokenPlain);
+    
+    // Calculate expiry
     const expiresAt = this.getExpiryTime(expiryMinutes);
 
     return {
-      token,        // Send this to user (via email)
+      tokenPlain,   // Send this to user (via email)
       tokenHash,    // Store this in database
       expiresAt     // Store this in database
+    };
+  }
+
+  /**
+   * DEPRECATED: Use generateResetToken() instead
+   * 
+   * This method is kept for backward compatibility but may be removed.
+   */
+  static createResetToken(expiryMinutes = 15) {
+    const result = this.generateResetToken(expiryMinutes);
+    // Map new names to old names for compatibility
+    return {
+      token: result.tokenPlain,
+      tokenHash: result.tokenHash,
+      expiresAt: result.expiresAt
     };
   }
 }

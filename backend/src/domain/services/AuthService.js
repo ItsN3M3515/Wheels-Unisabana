@@ -238,15 +238,16 @@ class AuthService {
   /**
    * Request password reset (out-of-session)
    * 
-   * Generates a secure reset token and stores it for the user (if exists).
+   * Generates a secure reset token and stores it in dedicated PasswordResetToken collection.
    * CRITICAL: Always returns success, never reveals if email exists.
    * 
-   * @param {Object} userRepository - Repository to find and update user
+   * @param {Object} userRepository - Repository to find user
+   * @param {Object} tokenRepository - Repository for password reset tokens
    * @param {string} corporateEmail - Email address (may or may not exist)
-   * @param {string} clientIp - Client IP address for logging
-   * @param {string} userAgent - Client user agent for logging
+   * @param {string} clientIp - Client IP address for audit trail
+   * @param {string} userAgent - Client user agent for audit trail
    * @returns {Promise<Object>} - { success: true, token?: string, user?: Object }
-   *   - If user exists: returns token (for email/logging), updates DB
+   *   - If user exists: returns token (for email/logging), stores in token collection
    *   - If user doesn't exist: returns success without token
    * 
    * Security:
@@ -255,11 +256,12 @@ class AuthService {
    * - Invalidates previous active tokens
    * - Token expiry: 15 minutes
    * - Stores hashed token (SHA-256), not plaintext
+   * - Stores IP and User-Agent for audit trail
    */
-  async requestPasswordReset(userRepository, corporateEmail, clientIp = 'unknown', userAgent = 'unknown') {
+  async requestPasswordReset(userRepository, tokenRepository, corporateEmail, clientIp = 'unknown', userAgent = 'unknown') {
     try {
       // Find user by email (case-insensitive)
-      const user = await userRepository.findByEmailWithResetFields(corporateEmail.toLowerCase());
+      const user = await userRepository.findByEmail(corporateEmail.toLowerCase());
 
       // If user doesn't exist, return generic success (prevent enumeration)
       if (!user) {
@@ -268,20 +270,22 @@ class AuthService {
         return { success: true };
       }
 
-      // Generate secure token
-      const { token, tokenHash, expiresAt } = ResetTokenUtil.createResetToken(15); // 15 min expiry
+      // Generate secure token using new utility
+      const { tokenPlain, tokenHash, expiresAt } = ResetTokenUtil.generateResetToken(15); // 15 min expiry
 
-      // Invalidate previous active tokens by setting consumed timestamp
-      // (Optional but recommended for security)
-      if (user.resetPasswordToken && !user.resetPasswordConsumed) {
-        console.log(`[AuthService] Invalidating previous reset token | userId: ${user.id}`);
+      // Invalidate all previous active tokens for this user
+      const invalidatedCount = await tokenRepository.invalidateActiveTokens(user.id);
+      if (invalidatedCount > 0) {
+        console.log(`[AuthService] Invalidated ${invalidatedCount} previous token(s) | userId: ${user.id}`);
       }
 
-      // Update user with new token
-      await userRepository.updateResetToken(user.id, {
-        resetPasswordToken: tokenHash,
-        resetPasswordExpires: expiresAt,
-        resetPasswordConsumed: null
+      // Create new token in dedicated collection
+      await tokenRepository.create({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        createdIp: clientIp,
+        createdUa: userAgent
       });
 
       // Log success WITHOUT PII (never log email or token)
@@ -292,7 +296,7 @@ class AuthService {
       // Production: Queue email with token link
       return {
         success: true,
-        token,  // Send this via email (only time we return plaintext)
+        token: tokenPlain,  // Send this via email (only time we return plaintext)
         user: {
           id: user.id,
           firstName: user.firstName,
@@ -315,16 +319,19 @@ class AuthService {
    * Reset Password (Token Redemption)
    * 
    * Validates reset token and sets new password. This is an out-of-session operation.
+   * Uses dedicated PasswordResetToken collection for validation.
    * 
    * Validation Steps:
-   * 1. Hash token and look up user
+   * 1. Hash token and look up in token collection
    * 2. Check token exists → 400 invalid_token
    * 3. Check token not expired → 410 token_expired
    * 4. Check token not consumed → 409 token_used
    * 5. Hash new password (bcrypt)
-   * 6. Update password and mark token consumed
+   * 6. Update password in User collection
+   * 7. Mark token as consumed in Token collection
    * 
    * @param {Object} userRepository - Repository for user operations
+   * @param {Object} tokenRepository - Repository for token operations
    * @param {string} token - Raw token from email (base64url)
    * @param {string} newPassword - New plaintext password
    * @param {string} clientIp - Client IP for logging
@@ -333,20 +340,21 @@ class AuthService {
    * 
    * Security:
    * - Never logs passwords or tokens
-   * - Uses constant-time token comparison
-   * - Marks token as consumed (one-time use)
+   * - Uses constant-time token comparison via SHA-256 hash lookup
+   * - Marks token as consumed (one-time use, idempotent)
    * - Updates passwordChangedAt timestamp
+   * - Atomic operations (no race conditions)
    */
-  async resetPassword(userRepository, token, newPassword, clientIp = 'unknown') {
+  async resetPassword(userRepository, tokenRepository, token, newPassword, clientIp = 'unknown') {
     try {
-      // 1. Hash token to look up user
+      // 1. Hash token to look up in token collection
       const tokenHash = ResetTokenUtil.hashToken(token);
       
-      // 2. Find user by token hash
-      const user = await userRepository.findByResetToken(tokenHash);
+      // 2. Find token record by hash
+      const tokenRecord = await tokenRepository.findByHash(tokenHash);
       
       // 3. Check token exists
-      if (!user || !user.resetPasswordToken) {
+      if (!tokenRecord) {
         console.log(`[AuthService] Invalid reset token attempt | ip: ${clientIp}`);
         const error = new Error('The reset link is invalid');
         error.code = 'invalid_token';
@@ -354,43 +362,36 @@ class AuthService {
         throw error;
       }
       
-      // 4. Verify token match (constant-time comparison)
-      const isValidToken = ResetTokenUtil.verifyToken(token, user.resetPasswordToken);
-      if (!isValidToken) {
-        console.log(`[AuthService] Token mismatch | userId: ${user.id} | ip: ${clientIp}`);
-        const error = new Error('The reset link is invalid');
-        error.code = 'invalid_token';
-        error.statusCode = 400;
-        throw error;
-      }
-      
-      // 5. Check token not expired
-      if (!user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
-        console.log(`[AuthService] Expired reset token | userId: ${user.id} | expired: ${user.resetPasswordExpires?.toISOString()} | ip: ${clientIp}`);
+      // 4. Check token not expired
+      if (!tokenRecord.expiresAt || tokenRecord.expiresAt < new Date()) {
+        console.log(`[AuthService] Expired reset token | userId: ${tokenRecord.userId} | expired: ${tokenRecord.expiresAt?.toISOString()} | ip: ${clientIp}`);
         const error = new Error('The reset link has expired');
         error.code = 'token_expired';
         error.statusCode = 410;
         throw error;
       }
       
-      // 6. Check token not already consumed
-      if (user.resetPasswordConsumed) {
-        console.log(`[AuthService] Already consumed reset token | userId: ${user.id} | consumed: ${user.resetPasswordConsumed.toISOString()} | ip: ${clientIp}`);
+      // 5. Check token not already consumed
+      if (tokenRecord.consumedAt) {
+        console.log(`[AuthService] Already consumed reset token | userId: ${tokenRecord.userId} | consumed: ${tokenRecord.consumedAt.toISOString()} | ip: ${clientIp}`);
         const error = new Error('The reset link has already been used');
         error.code = 'token_used';
         error.statusCode = 409;
         throw error;
       }
       
-      // 7. Hash new password (bcrypt)
+      // 6. Hash new password (bcrypt)
       const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS) || 10;
       const newPasswordHash = await bcrypt.hash(newPassword, bcryptRounds);
       
-      // 8. Update password and consume token
-      await userRepository.updatePasswordAndConsumeToken(user.id, newPasswordHash);
+      // 7. Update password in User collection
+      await userRepository.updatePassword(tokenRecord.userId, newPasswordHash);
+      
+      // 8. Mark token as consumed in Token collection (idempotent)
+      await tokenRepository.consumeToken(tokenHash);
       
       // Log success WITHOUT sensitive data
-      console.log(`[AuthService] Password reset successful | userId: ${user.id} | ip: ${clientIp}`);
+      console.log(`[AuthService] Password reset successful | userId: ${tokenRecord.userId} | ip: ${clientIp}`);
       
       return { success: true };
       

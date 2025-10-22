@@ -11,6 +11,7 @@
 const AuthService = require('../../domain/services/AuthService');
 const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
 const MongoVehicleRepository = require('../../infrastructure/repositories/MongoVehicleRepository');
+const MongoPasswordResetTokenRepository = require('../../infrastructure/repositories/PasswordResetTokenRepository');
 const { generateCsrfToken, setCsrfCookie, clearCsrfCookie } = require('../../utils/csrf');
 
 class AuthController {
@@ -18,6 +19,7 @@ class AuthController {
     this.authService = new AuthService();
     this.userRepository = new MongoUserRepository();
     this.vehicleRepository = new MongoVehicleRepository();
+    this.tokenRepository = new MongoPasswordResetTokenRepository();
   }
 
   /**
@@ -281,9 +283,10 @@ class AuthController {
       // Log request WITHOUT email (PII redaction)
       console.log(`[AuthController] Password reset requested | emailDomain: ${corporateEmail?.split('@')[1] || 'unknown'} | IP: ${clientIp} | correlationId: ${req.correlationId}`);
 
-      // Request reset from AuthService
+      // Request reset from AuthService (now with token repository)
       const result = await this.authService.requestPasswordReset(
         this.userRepository,
+        this.tokenRepository,
         corporateEmail,
         clientIp,
         userAgent
@@ -362,9 +365,10 @@ class AuthController {
       // Log attempt WITHOUT sensitive data
       console.log(`[AuthController] Password reset attempt | IP: ${clientIp} | correlationId: ${req.correlationId}`);
 
-      // Perform password reset via AuthService
+      // Perform password reset via AuthService (now with token repository)
       await this.authService.resetPassword(
         this.userRepository,
+        this.tokenRepository,
         token,
         newPassword,
         clientIp
