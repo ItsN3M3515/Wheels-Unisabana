@@ -1,8 +1,8 @@
 const express = require('express');
 const AuthController = require('../controllers/authController');
 const validateRequest = require('../middlewares/validateRequest');
-const { loginSchema } = require('../validation/authSchemas');
-const { loginRateLimiter } = require('../middlewares/rateLimiter');
+const { loginSchema, passwordResetRequestSchema } = require('../validation/authSchemas');
+const { loginRateLimiter, passwordResetRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
 
 const router = express.Router();
@@ -304,6 +304,102 @@ router.get(
   '/me',
   authenticate,
   authController.getMe.bind(authController)
+);
+
+/**
+ * @openapi
+ * /auth/password/reset-request:
+ *   post:
+ *     tags:
+ *       - Authentication
+ *     summary: Request password reset
+ *     description: |
+ *       Initiates a password reset process for a user (out-of-session).
+ *       
+ *       **Security**:
+ *       - Generic 200 response (never reveals if email exists)
+ *       - Rate limited (3 requests per 15 min per IP)
+ *       - PII redaction in logs (email never logged)
+ *       - Cryptographically secure token (32 bytes random)
+ *       - Token expires in 15 minutes
+ *       - One-time use token (consumed after reset)
+ *       
+ *       **Flow**:
+ *       1. User provides email
+ *       2. If account exists: token generated and sent via email
+ *       3. If account doesn't exist: generic success (no enumeration)
+ *       4. User receives email with reset link (MVP: check server logs)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - corporateEmail
+ *             properties:
+ *               corporateEmail:
+ *                 type: string
+ *                 format: email
+ *                 example: "jdoe@unisabana.edu.co"
+ *           examples:
+ *             request:
+ *               summary: Password reset request
+ *               value:
+ *                 corporateEmail: "jdoe@unisabana.edu.co"
+ *     responses:
+ *       200:
+ *         description: |
+ *           Generic success response (always returned).
+ *           
+ *           Note: Response is intentionally generic to prevent user enumeration.
+ *           If the email exists, a reset token is generated and sent.
+ *           If the email doesn't exist, the same response is returned.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 ok:
+ *                   type: boolean
+ *                   example: true
+ *             example:
+ *               ok: true
+ *       400:
+ *         description: Validation error (invalid email format)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidation'
+ *             example:
+ *               code: "invalid_schema"
+ *               message: "Validation failed"
+ *               details:
+ *                 - field: "corporateEmail"
+ *                   issue: "corporateEmail must be a valid email address"
+ *               correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *       429:
+ *         description: Rate limit exceeded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: "too_many_attempts"
+ *                 message:
+ *                   type: string
+ *                   example: "Please try again later"
+ *             example:
+ *               code: "too_many_attempts"
+ *               message: "Please try again later"
+ */
+router.post(
+  '/password/reset-request',
+  passwordResetRateLimiter,
+  validateRequest(passwordResetRequestSchema),
+  authController.requestPasswordReset.bind(authController)
 );
 
 module.exports = router;

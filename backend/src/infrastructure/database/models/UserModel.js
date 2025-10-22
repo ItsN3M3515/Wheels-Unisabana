@@ -49,6 +49,26 @@ const userSchema = new mongoose.Schema({
   profilePhoto: {
     type: String,
     default: null
+  },
+  // Password reset fields
+  resetPasswordToken: {
+    type: String,
+    default: null,
+    select: false  // Never include in queries by default
+  },
+  resetPasswordExpires: {
+    type: Date,
+    default: null,
+    select: false
+  },
+  resetPasswordConsumed: {
+    type: Date,
+    default: null,
+    select: false
+  },
+  passwordChangedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true,      // Crea createdAt y updatedAt automáticamente

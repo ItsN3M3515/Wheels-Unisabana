@@ -63,9 +63,38 @@ const loginRateLimiter = rateLimit({
   }
 });
 
+/**
+ * Rate limiter for password reset requests
+ * 3 requests per 15 minutes per IP
+ * Prevents abuse of reset functionality
+ * 
+ * Security: Soft rate limit (generic 429 response)
+ */
+const passwordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // Maximum 3 reset requests per IP per window
+  message: {
+    code: 'too_many_attempts',
+    message: 'Please try again later'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false, // Count all requests
+  keyGenerator: (req) => {
+    // Rate limit by IP (primary)
+    // Could also add email-based limiting in future
+    return req.ip;
+  },
+  skip: (req) => {
+    // Skip rate limiting in development and testing
+    return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+  }
+});
+
 module.exports = {
   publicRateLimiter,
   generalRateLimiter,
-  loginRateLimiter
+  loginRateLimiter,
+  passwordResetRateLimiter
 };
 

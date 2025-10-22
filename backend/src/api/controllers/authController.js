@@ -5,6 +5,7 @@
  * - POST /auth/login - Create session (set JWT cookie)
  * - POST /auth/logout - Destroy session (clear cookie)
  * - GET /auth/me - Get current user session/identity
+ * - POST /auth/password/reset-request - Request password reset
  */
 
 const AuthService = require('../../domain/services/AuthService');
@@ -238,6 +239,88 @@ class AuthController {
       return res.status(500).json({
         code: 'internal_error',
         message: 'An error occurred while fetching profile',
+        correlationId: req.correlationId
+      });
+    }
+  }
+
+  /**
+   * POST /auth/password/reset-request
+   * 
+   * Request password reset (out-of-session)
+   * 
+   * @param {Object} req - Express request
+   * @param {Object} res - Express response
+   * 
+   * Request body:
+   * {
+   *   "corporateEmail": "user@unisabana.edu.co"
+   * }
+   * 
+   * Response 200 (always):
+   * {
+   *   "ok": true
+   * }
+   * 
+   * Errors:
+   * - 400 invalid_schema: Invalid email format
+   * - 429 too_many_attempts: Rate limit exceeded
+   * 
+   * Security:
+   * - Generic 200 response (never reveals if email exists)
+   * - Rate limited (3 requests per 15 min per IP)
+   * - PII redaction in logs (never log email)
+   * - Token dispatched via email (MVP: logged for testing)
+   */
+  async requestPasswordReset(req, res) {
+    try {
+      const { corporateEmail } = req.body;
+      const clientIp = req.ip;
+      const userAgent = req.get('User-Agent') || 'unknown';
+
+      // Log request WITHOUT email (PII redaction)
+      console.log(`[AuthController] Password reset requested | emailDomain: ${corporateEmail?.split('@')[1] || 'unknown'} | IP: ${clientIp} | correlationId: ${req.correlationId}`);
+
+      // Request reset from AuthService
+      const result = await this.authService.requestPasswordReset(
+        this.userRepository,
+        corporateEmail,
+        clientIp,
+        userAgent
+      );
+
+      // If token was generated (user exists), log it for MVP
+      // Production: Dispatch email via queue/service
+      if (result.token) {
+        const resetUrl = `${process.env.FRONTEND_ORIGIN || 'http://localhost:5173'}/reset-password?token=${result.token}`;
+        
+        // MVP: Log reset URL (remove in production)
+        console.log(`[AuthController] Password reset URL generated | userId: ${result.user.id} | correlationId: ${req.correlationId}`);
+        console.log(`[AuthController] Reset URL (MVP only): ${resetUrl}`);
+        
+        // TODO: Production - Queue email
+        // await emailQueue.add('password-reset', {
+        //   email: result.user.email,
+        //   firstName: result.user.firstName,
+        //   resetUrl,
+        //   expiresIn: '15 minutes'
+        // });
+      }
+
+      // CRITICAL: Always return 200 with generic message
+      // Never reveal if email exists
+      res.status(200).json({
+        ok: true
+      });
+
+    } catch (error) {
+      // Log internal errors WITHOUT PII
+      console.error(`[AuthController] Password reset request error | IP: ${req.ip} | correlationId: ${req.correlationId}`);
+
+      // Generic error for client
+      return res.status(500).json({
+        code: 'internal_error',
+        message: 'An error occurred while processing your request',
         correlationId: req.correlationId
       });
     }

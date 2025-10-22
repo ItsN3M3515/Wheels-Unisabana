@@ -14,6 +14,7 @@
 
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const ResetTokenUtil = require('../../utils/resetToken');
 
 class AuthService {
   constructor() {
@@ -230,6 +231,82 @@ class AuthService {
       
       const genericError = new Error('Failed to fetch user profile');
       genericError.code = 'profile_fetch_error';
+      throw genericError;
+    }
+  }
+
+  /**
+   * Request password reset (out-of-session)
+   * 
+   * Generates a secure reset token and stores it for the user (if exists).
+   * CRITICAL: Always returns success, never reveals if email exists.
+   * 
+   * @param {Object} userRepository - Repository to find and update user
+   * @param {string} corporateEmail - Email address (may or may not exist)
+   * @param {string} clientIp - Client IP address for logging
+   * @param {string} userAgent - Client user agent for logging
+   * @returns {Promise<Object>} - { success: true, token?: string, user?: Object }
+   *   - If user exists: returns token (for email/logging), updates DB
+   *   - If user doesn't exist: returns success without token
+   * 
+   * Security:
+   * - Never logs email addresses (PII redaction)
+   * - Generic response (no user enumeration)
+   * - Invalidates previous active tokens
+   * - Token expiry: 15 minutes
+   * - Stores hashed token (SHA-256), not plaintext
+   */
+  async requestPasswordReset(userRepository, corporateEmail, clientIp = 'unknown', userAgent = 'unknown') {
+    try {
+      // Find user by email (case-insensitive)
+      const user = await userRepository.findByEmailWithResetFields(corporateEmail.toLowerCase());
+
+      // If user doesn't exist, return generic success (prevent enumeration)
+      if (!user) {
+        // Log attempt WITHOUT email (PII redaction)
+        console.log(`[AuthService] Password reset requested | user: not_found | ip: ${clientIp}`);
+        return { success: true };
+      }
+
+      // Generate secure token
+      const { token, tokenHash, expiresAt } = ResetTokenUtil.createResetToken(15); // 15 min expiry
+
+      // Invalidate previous active tokens by setting consumed timestamp
+      // (Optional but recommended for security)
+      if (user.resetPasswordToken && !user.resetPasswordConsumed) {
+        console.log(`[AuthService] Invalidating previous reset token | userId: ${user.id}`);
+      }
+
+      // Update user with new token
+      await userRepository.updateResetToken(user.id, {
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: expiresAt,
+        resetPasswordConsumed: null
+      });
+
+      // Log success WITHOUT PII (never log email or token)
+      console.log(`[AuthService] Password reset token generated | userId: ${user.id} | expires: ${expiresAt.toISOString()} | ip: ${clientIp}`);
+
+      // Return token for email dispatch
+      // MVP: Can log token URL for testing
+      // Production: Queue email with token link
+      return {
+        success: true,
+        token,  // Send this via email (only time we return plaintext)
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          email: user.corporateEmail
+        }
+      };
+
+    } catch (error) {
+      // Log error WITHOUT PII
+      console.error('[AuthService] Password reset request failed (internal error):', error.message);
+
+      // Generic error for client (no details exposed)
+      const genericError = new Error('Failed to process password reset request');
+      genericError.code = 'password_reset_error';
       throw genericError;
     }
   }

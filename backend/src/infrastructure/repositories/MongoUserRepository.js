@@ -116,6 +116,42 @@ class MongoUserRepository extends UserRepository {
     }
   }
 
+  /**
+   * Find user by email with reset token fields
+   * 
+   * Includes resetPasswordToken, resetPasswordExpires, resetPasswordConsumed
+   * (normally excluded by select: false)
+   * 
+   * @param {string} email - Corporate email
+   * @returns {Promise<User|null>} - User with reset fields or null
+   */
+  async findByEmailWithResetFields(email) {
+    const doc = await UserModel.findOne({ 
+      corporateEmail: email.toLowerCase() 
+    }).select('+resetPasswordToken +resetPasswordExpires +resetPasswordConsumed');
+    
+    return doc ? User.fromDocument(doc) : null;
+  }
+
+  /**
+   * Update user's reset token fields
+   * 
+   * @param {string} userId - User ID
+   * @param {Object} tokenData - { resetPasswordToken, resetPasswordExpires, resetPasswordConsumed }
+   * @returns {Promise<void>}
+   */
+  async updateResetToken(userId, tokenData) {
+    await UserModel.findByIdAndUpdate(
+      userId,
+      {
+        resetPasswordToken: tokenData.resetPasswordToken,
+        resetPasswordExpires: tokenData.resetPasswordExpires,
+        resetPasswordConsumed: tokenData.resetPasswordConsumed
+      },
+      { runValidators: false } // Skip validators for system fields
+    );
+  }
+
   //Conversión de errores de Mongoose a formato details
   _formatValidationErrors(error) {
     return Object.keys(error.errors).map(field => ({ field, issue: error.errors[field].message }));

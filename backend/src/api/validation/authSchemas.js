@@ -41,7 +41,32 @@ const loginSchema = Joi.object({
   stripUnknown: true
 });
 
+/**
+ * Password Reset Request Schema
+ * 
+ * Fields:
+ * - corporateEmail: Valid email format (required)
+ * 
+ * Security: Always returns generic success, never reveals if email exists
+ */
+const passwordResetRequestSchema = Joi.object({
+  corporateEmail: Joi.string()
+    .email()
+    .required()
+    .trim()
+    .lowercase()
+    .messages({
+      'string.email': 'corporateEmail must be a valid email address',
+      'any.required': 'corporateEmail is required',
+      'string.empty': 'corporateEmail cannot be empty'
+    })
+}).options({
+  abortEarly: false,
+  stripUnknown: true
+});
+
 module.exports = {
-  loginSchema
+  loginSchema,
+  passwordResetRequestSchema
 };
 
