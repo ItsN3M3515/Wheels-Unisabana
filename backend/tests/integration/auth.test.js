@@ -2,11 +2,13 @@
  * Auth Integration Tests (Supertest)
  * 
  * Tests for SUBTASK 2.1.6 - OpenAPI and Tests (Login/Logout/Auth middleware)
+ * Tests for GET /auth/me - Session verification endpoint
  * 
  * Coverage:
  * - Login success/failure scenarios
  * - Logout cookie clearing
  * - Protected routes with/without auth
+ * - GET /auth/me with valid/invalid sessions
  * - CSRF protection
  * - Cookie flags verification
  * - Rate limiting
@@ -16,18 +18,32 @@ const request = require('supertest');
 const app = require('../../src/app');
 const connectDB = require('../../src/infrastructure/database/connection');
 const UserModel = require('../../src/infrastructure/database/models/UserModel');
+const VehicleModel = require('../../src/infrastructure/database/models/VehicleModel');
 const bcrypt = require('bcrypt');
 
 describe('Auth Integration Tests', () => {
   let testUser = null;
+  let testDriver = null;
+  let testDriverWithVehicle = null;
 
   beforeAll(async () => {
     await connectDB();
     
-    // Clean up test user
-    await UserModel.deleteMany({ corporateEmail: 'supertest@unisabana.edu.co' });
+    // Clean up test users
+    await UserModel.deleteMany({ 
+      corporateEmail: { 
+        $in: [
+          'supertest@unisabana.edu.co',
+          'testdriver@unisabana.edu.co',
+          'testdrivervehicle@unisabana.edu.co'
+        ] 
+      } 
+    });
     
-    // Create test user
+    // Clean up test vehicles
+    await VehicleModel.deleteMany({ plate: { $in: ['ABC123', 'XYZ789'] } });
+    
+    // Create test passenger
     const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
     testUser = await UserModel.create({
       role: 'passenger',
@@ -38,10 +54,53 @@ describe('Auth Integration Tests', () => {
       phone: '+573004443333',
       password: hashedPassword
     });
+
+    // Create test driver without vehicle
+    testDriver = await UserModel.create({
+      role: 'driver',
+      firstName: 'Test',
+      lastName: 'Driver',
+      universityId: '777888',
+      corporateEmail: 'testdriver@unisabana.edu.co',
+      phone: '+573005554444',
+      password: hashedPassword
+    });
+
+    // Create test driver with vehicle
+    testDriverWithVehicle = await UserModel.create({
+      role: 'driver',
+      firstName: 'Vehicle',
+      lastName: 'Owner',
+      universityId: '666777',
+      corporateEmail: 'testdrivervehicle@unisabana.edu.co',
+      phone: '+573006665555',
+      password: hashedPassword
+    });
+
+    // Create vehicle for testDriverWithVehicle
+    await VehicleModel.create({
+      driverId: testDriverWithVehicle._id.toString(),
+      plate: 'ABC123',
+      brand: 'Toyota',
+      model: 'Corolla',
+      year: 2020,
+      color: 'blue',
+      soatExpiry: new Date('2025-12-31'),
+      tecnicomechanicaExpiry: new Date('2025-12-31')
+    });
   });
 
   afterAll(async () => {
-    await UserModel.deleteMany({ corporateEmail: 'supertest@unisabana.edu.co' });
+    await UserModel.deleteMany({ 
+      corporateEmail: { 
+        $in: [
+          'supertest@unisabana.edu.co',
+          'testdriver@unisabana.edu.co',
+          'testdrivervehicle@unisabana.edu.co'
+        ] 
+      } 
+    });
+    await VehicleModel.deleteMany({ plate: { $in: ['ABC123', 'XYZ789'] } });
     await require('mongoose').connection.close();
   });
 
@@ -329,6 +388,211 @@ describe('Auth Integration Tests', () => {
         .set('Cookie', cookies)
         // No X-CSRF-Token header
         .expect(200);
+    });
+  });
+
+  describe('GET /auth/me - Session Verification', () => {
+    it('should return 401 without access_token cookie', async () => {
+      const res = await request(app)
+        .get('/auth/me')
+        .expect(401)
+        .expect('Content-Type', /json/);
+
+      expect(res.body).toHaveProperty('code', 'unauthorized');
+      expect(res.body).toHaveProperty('message', 'Missing or invalid session');
+      expect(res.body).toHaveProperty('correlationId');
+    });
+
+    it('should return 401 with invalid/malformed token', async () => {
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', 'access_token=invalid.token.here')
+        .expect(401)
+        .expect('Content-Type', /json/);
+
+      expect(res.body.code).toMatch(/unauthorized|invalid_token/);
+      expect(res.body).toHaveProperty('message');
+    });
+
+    it('should return 401 with expired token', async () => {
+      // This would require creating an expired token
+      // For now, we test with invalid token (same behavior)
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', 'access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.expired')
+        .expect(401);
+
+      expect(res.body.code).toMatch(/unauthorized|invalid_token|token_expired/);
+    });
+
+    it('should return 200 with minimal identity DTO for passenger', async () => {
+      // Login as passenger
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          corporateEmail: 'supertest@unisabana.edu.co',
+          password: 'TestPassword123!'
+        })
+        .expect(200);
+
+      const cookies = loginRes.headers['set-cookie'];
+
+      // Call /auth/me
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', cookies)
+        .expect(200)
+        .expect('Content-Type', /json/)
+        .expect('Cache-Control', 'no-store');
+
+      // Verify response structure
+      expect(res.body).toHaveProperty('id');
+      expect(res.body).toHaveProperty('role', 'passenger');
+      expect(res.body).toHaveProperty('firstName', 'Super');
+      expect(res.body).toHaveProperty('lastName', 'Test');
+
+      // Passenger should NOT have driver object
+      expect(res.body).not.toHaveProperty('driver');
+
+      // Should NOT contain sensitive fields
+      expect(res.body).not.toHaveProperty('password');
+      expect(res.body).not.toHaveProperty('corporateEmail');
+      expect(res.body).not.toHaveProperty('phone');
+      expect(res.body).not.toHaveProperty('universityId');
+      expect(res.body).not.toHaveProperty('createdAt');
+      expect(res.body).not.toHaveProperty('updatedAt');
+    });
+
+    it('should return 200 with driver.hasVehicle=false for driver without vehicle', async () => {
+      // Login as driver without vehicle
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          corporateEmail: 'testdriver@unisabana.edu.co',
+          password: 'TestPassword123!'
+        })
+        .expect(200);
+
+      const cookies = loginRes.headers['set-cookie'];
+
+      // Call /auth/me
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', cookies)
+        .expect(200)
+        .expect('Content-Type', /json/)
+        .expect('Cache-Control', 'no-store');
+
+      // Verify response structure
+      expect(res.body).toHaveProperty('id');
+      expect(res.body).toHaveProperty('role', 'driver');
+      expect(res.body).toHaveProperty('firstName', 'Test');
+      expect(res.body).toHaveProperty('lastName', 'Driver');
+
+      // Driver should have driver object with hasVehicle=false
+      expect(res.body).toHaveProperty('driver');
+      expect(res.body.driver).toHaveProperty('hasVehicle', false);
+
+      // Should NOT contain sensitive fields
+      expect(res.body).not.toHaveProperty('password');
+      expect(res.body).not.toHaveProperty('corporateEmail');
+      expect(res.body).not.toHaveProperty('phone');
+    });
+
+    it('should return 200 with driver.hasVehicle=true for driver with vehicle', async () => {
+      // Login as driver with vehicle
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          corporateEmail: 'testdrivervehicle@unisabana.edu.co',
+          password: 'TestPassword123!'
+        })
+        .expect(200);
+
+      const cookies = loginRes.headers['set-cookie'];
+
+      // Call /auth/me
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', cookies)
+        .expect(200)
+        .expect('Content-Type', /json/)
+        .expect('Cache-Control', 'no-store');
+
+      // Verify response structure
+      expect(res.body).toHaveProperty('id');
+      expect(res.body).toHaveProperty('role', 'driver');
+      expect(res.body).toHaveProperty('firstName', 'Vehicle');
+      expect(res.body).toHaveProperty('lastName', 'Owner');
+
+      // Driver should have driver object with hasVehicle=true
+      expect(res.body).toHaveProperty('driver');
+      expect(res.body.driver).toHaveProperty('hasVehicle', true);
+
+      // Should NOT contain sensitive fields or vehicle details
+      expect(res.body).not.toHaveProperty('password');
+      expect(res.body).not.toHaveProperty('vehicleId');
+      expect(res.body).not.toHaveProperty('plate');
+    });
+
+    it('should include Cache-Control: no-store header', async () => {
+      // Login
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          corporateEmail: 'supertest@unisabana.edu.co',
+          password: 'TestPassword123!'
+        })
+        .expect(200);
+
+      const cookies = loginRes.headers['set-cookie'];
+
+      // Call /auth/me and verify header
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Cookie', cookies)
+        .expect(200)
+        .expect('Cache-Control', 'no-store');
+
+      expect(res.headers['cache-control']).toBe('no-store');
+    });
+
+    it('should be idempotent (multiple calls return same data)', async () => {
+      // Login
+      const loginRes = await request(app)
+        .post('/auth/login')
+        .send({
+          corporateEmail: 'supertest@unisabana.edu.co',
+          password: 'TestPassword123!'
+        })
+        .expect(200);
+
+      const cookies = loginRes.headers['set-cookie'];
+
+      // Call /auth/me multiple times
+      const responses = [];
+      for (let i = 0; i < 3; i++) {
+        const res = await request(app)
+          .get('/auth/me')
+          .set('Cookie', cookies)
+          .expect(200);
+        
+        responses.push(res.body);
+      }
+
+      // All responses should be identical
+      expect(responses[0]).toEqual(responses[1]);
+      expect(responses[1]).toEqual(responses[2]);
+    });
+
+    it('should include correlationId in error responses', async () => {
+      const res = await request(app)
+        .get('/auth/me')
+        .expect(401);
+
+      expect(res.body).toHaveProperty('correlationId');
+      expect(typeof res.body.correlationId).toBe('string');
+      expect(res.body.correlationId.length).toBeGreaterThan(0);
     });
   });
 

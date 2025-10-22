@@ -4,16 +4,19 @@
  * Handles authentication endpoints:
  * - POST /auth/login - Create session (set JWT cookie)
  * - POST /auth/logout - Destroy session (clear cookie)
+ * - GET /auth/me - Get current user session/identity
  */
 
 const AuthService = require('../../domain/services/AuthService');
 const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
+const MongoVehicleRepository = require('../../infrastructure/repositories/MongoVehicleRepository');
 const { generateCsrfToken, setCsrfCookie, clearCsrfCookie } = require('../../utils/csrf');
 
 class AuthController {
   constructor() {
     this.authService = new AuthService();
     this.userRepository = new MongoUserRepository();
+    this.vehicleRepository = new MongoVehicleRepository();
   }
 
   /**
@@ -162,6 +165,82 @@ class AuthController {
     res.status(200).json({
       ok: true
     });
+  }
+
+  /**
+   * GET /auth/me
+   * 
+   * Returns minimal user identity for session verification
+   * Protected by authenticate middleware (requires valid JWT cookie)
+   * 
+   * @param {Object} req - Express request (req.user set by authenticate middleware)
+   * @param {Object} res - Express response
+   * 
+   * Response 200:
+   * {
+   *   "id": "665e2a...f1",
+   *   "role": "driver",
+   *   "firstName": "John",
+   *   "lastName": "Doe",
+   *   "driver": { "hasVehicle": true }  // only for drivers
+   * }
+   * 
+   * Errors:
+   * - 401 unauthorized: Missing or invalid session (handled by authenticate middleware)
+   * - 500 internal_error: Unexpected server error
+   * 
+   * Security:
+   * - No secrets or internal fields exposed
+   * - Cache-Control: no-store (never cache sensitive data)
+   * - PII redaction in logs (never log email or tokens)
+   * - Correlation ID for observability
+   */
+  async getMe(req, res) {
+    try {
+      // req.user is set by authenticate middleware
+      // Shape: { id, sub, role, email, iat, exp }
+      const userId = req.user.id;
+
+      // Log request WITHOUT PII
+      console.log(`[AuthController] GET /auth/me | userId: ${userId} | role: ${req.user.role} | correlationId: ${req.correlationId}`);
+
+      // Fetch minimal user profile with hasVehicle flag
+      const profile = await this.authService.getCurrentUserProfile(
+        this.userRepository,
+        this.vehicleRepository,
+        userId
+      );
+
+      // Set Cache-Control to prevent caching of sensitive data
+      res.set('Cache-Control', 'no-store');
+
+      // Log successful response WITHOUT PII
+      console.log(`[AuthController] GET /auth/me success | userId: ${userId} | correlationId: ${req.correlationId}`);
+
+      res.status(200).json(profile);
+
+    } catch (error) {
+      // Handle user not found (should not happen with valid JWT)
+      if (error.code === 'user_not_found') {
+        console.error(`[AuthController] User not found (orphaned JWT?) | userId: ${req.user?.id} | correlationId: ${req.correlationId}`);
+        
+        return res.status(401).json({
+          code: 'unauthorized',
+          message: 'Missing or invalid session',
+          correlationId: req.correlationId
+        });
+      }
+
+      // Log internal errors WITHOUT details
+      console.error(`[AuthController] GET /auth/me error | userId: ${req.user?.id} | correlationId: ${req.correlationId}`);
+
+      // Generic error for client
+      return res.status(500).json({
+        code: 'internal_error',
+        message: 'An error occurred while fetching profile',
+        correlationId: req.correlationId
+      });
+    }
   }
 }
 

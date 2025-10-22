@@ -173,6 +173,68 @@ class AuthService {
   }
 
   /**
+   * Get current authenticated user profile (minimal DTO)
+   * 
+   * Fetches user by ID and returns a minimal identity projection
+   * suitable for session verification endpoints.
+   * 
+   * @param {Object} userRepository - Repository to find user
+   * @param {Object} vehicleRepository - Repository to check vehicle status
+   * @param {string} userId - User ID from JWT (req.user.id)
+   * @returns {Promise<Object>} - Minimal user DTO with hasVehicle flag
+   * @throws {Error} - If user not found (should not happen with valid JWT)
+   * 
+   * Response shape:
+   * {
+   *   id, role, firstName, lastName,
+   *   driver: { hasVehicle: boolean } // only for drivers
+   * }
+   */
+  async getCurrentUserProfile(userRepository, vehicleRepository, userId) {
+    try {
+      // Find user by ID
+      const user = await userRepository.findById(userId);
+
+      if (!user) {
+        // This should not happen with a valid JWT, but handle gracefully
+        const error = new Error('User not found');
+        error.code = 'user_not_found';
+        throw error;
+      }
+
+      // Build minimal DTO
+      const profile = {
+        id: user.id,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName
+      };
+
+      // If driver, check if they have a vehicle
+      if (user.role === 'driver') {
+        const vehicle = await vehicleRepository.findByDriverId(userId);
+        profile.driver = {
+          hasVehicle: vehicle !== null
+        };
+      }
+
+      return profile;
+    } catch (error) {
+      // Re-throw custom errors
+      if (error.code === 'user_not_found') {
+        throw error;
+      }
+
+      // Log internal errors
+      console.error('[AuthService] Failed to fetch user profile:', error.message);
+      
+      const genericError = new Error('Failed to fetch user profile');
+      genericError.code = 'profile_fetch_error';
+      throw genericError;
+    }
+  }
+
+  /**
    * Get JWT configuration (for testing/debugging)
    * 
    * @returns {Object} - { expiresIn, issuer, audience }

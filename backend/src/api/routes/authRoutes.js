@@ -3,6 +3,7 @@ const AuthController = require('../controllers/authController');
 const validateRequest = require('../middlewares/validateRequest');
 const { loginSchema } = require('../validation/authSchemas');
 const { loginRateLimiter } = require('../middlewares/rateLimiter');
+const authenticate = require('../middlewares/authenticate');
 
 const router = express.Router();
 const authController = new AuthController();
@@ -13,6 +14,7 @@ const authController = new AuthController();
  * Endpoints:
  * - POST /auth/login - Create session (set JWT cookie)
  * - POST /auth/logout - Destroy session (clear cookie)
+ * - GET /auth/me - Get current user session/identity (protected)
  * 
  * Security:
  * - Rate limiting (5 login attempts/min/IP)
@@ -195,6 +197,113 @@ router.post(
 router.post(
   '/logout',
   authController.logout.bind(authController)
+);
+
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     tags:
+ *       - Authentication
+ *     summary: Get current user session/identity
+ *     description: |
+ *       Returns minimal user identity for session verification.
+ *       
+ *       **Protected**: Requires valid JWT cookie (set by /auth/login).
+ *       
+ *       **Security**:
+ *       - No secrets or internal fields exposed
+ *       - Cache-Control: no-store (never cache)
+ *       - PII redaction in logs
+ *       - Correlation ID for observability
+ *       
+ *       **Use case**: Client renders protected UI without re-login
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user identity
+ *         headers:
+ *           Cache-Control:
+ *             description: Prevent caching of sensitive data
+ *             schema:
+ *               type: string
+ *               example: "no-store"
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   example: "665e2a...f1"
+ *                 role:
+ *                   type: string
+ *                   enum: [passenger, driver]
+ *                   example: "driver"
+ *                 firstName:
+ *                   type: string
+ *                   example: "John"
+ *                 lastName:
+ *                   type: string
+ *                   example: "Doe"
+ *                 driver:
+ *                   type: object
+ *                   description: Only present for drivers
+ *                   properties:
+ *                     hasVehicle:
+ *                       type: boolean
+ *                       example: true
+ *             examples:
+ *               driver_with_vehicle:
+ *                 summary: Driver with vehicle
+ *                 value:
+ *                   id: "665e2a...f1"
+ *                   role: "driver"
+ *                   firstName: "John"
+ *                   lastName: "Doe"
+ *                   driver:
+ *                     hasVehicle: true
+ *               driver_without_vehicle:
+ *                 summary: Driver without vehicle
+ *                 value:
+ *                   id: "665e2a...f2"
+ *                   role: "driver"
+ *                   firstName: "Jane"
+ *                   lastName: "Smith"
+ *                   driver:
+ *                     hasVehicle: false
+ *               passenger:
+ *                 summary: Passenger
+ *                 value:
+ *                   id: "665e2a...f3"
+ *                   role: "passenger"
+ *                   firstName: "Alice"
+ *                   lastName: "Johnson"
+ *       401:
+ *         description: Missing or invalid session
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: "unauthorized"
+ *                 message:
+ *                   type: string
+ *                   example: "Missing or invalid session"
+ *                 correlationId:
+ *                   type: string
+ *             example:
+ *               code: "unauthorized"
+ *               message: "Missing or invalid session"
+ *               correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ */
+router.get(
+  '/me',
+  authenticate,
+  authController.getMe.bind(authController)
 );
 
 module.exports = router;
