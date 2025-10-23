@@ -11,7 +11,12 @@ const PassengerTripController = require('../controllers/passengerTripController'
 const BookingRequestController = require('../controllers/bookingRequestController');
 const validateRequest = require('../middlewares/validateRequest');
 const { searchTripsQuerySchema } = require('../validation/tripOfferSchemas');
-const { createBookingRequestSchema, listBookingRequestsQuerySchema, bookingIdParamSchema } = require('../validation/bookingRequestSchemas');
+const { 
+  createBookingRequestSchema, 
+  listBookingRequestsQuerySchema, 
+  bookingIdParamSchema,
+  cancelBookingRequestSchema 
+} = require('../validation/bookingRequestSchemas');
 const { generalRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
@@ -630,27 +635,27 @@ router.get(
 
 /**
  * @openapi
- * /passengers/bookings/{bookingId}:
- *   delete:
+ * /passengers/bookings/{bookingId}/cancel:
+ *   post:
  *     tags:
  *       - Passenger Trips
- *     summary: Cancel my booking request (Passenger only, owner-only)
+ *     summary: Cancel my booking request (US-3.4.3)
  *     description: |
- *       Cancel a booking request owned by the caller. Only pending requests can be canceled.
+ *       Cancel a booking request owned by the caller. Supports both pending and accepted bookings.
  *       
  *       **Authorization**: Requires role='passenger', valid JWT cookie, and ownership.
  *       **CSRF Protection**: Required for state-changing operations.
  *       
  *       **Business Rules**:
  *       - Only the request owner (passenger) can cancel
- *       - Only `pending` status can be canceled → `canceled_by_passenger`
- *       - **Idempotent**: If already `canceled_by_passenger`, returns 200 with status unchanged
- *       - Future statuses (accepted, declined, expired) cannot be canceled → 409
+ *       - Pending: Simple status update → `canceled_by_passenger`
+ *       - Accepted: Transaction to decrement seat ledger + set refund flag
+ *       - Optional reason stored for audit trail
+ *       - **Idempotent**: If already canceled, returns 200 with zero effects
  *       
- *       **Status Transition**:
- *       - `pending` → `canceled_by_passenger`: OK (200)
- *       - `canceled_by_passenger` → `canceled_by_passenger`: OK (200, idempotent)
- *       - `accepted`/`declined`/`expired` → ✗ 409 invalid_state
+ *       **Returns**:
+ *       - Effects summary with `ledgerReleased` (0 for pending, seats for accepted)
+ *       - `refundCreated` flag (true if paid booking eligible for refund - US-4.2)
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -662,9 +667,27 @@ router.get(
  *           pattern: '^[a-f\d]{24}$'
  *         description: Booking request ID (MongoDB ObjectId)
  *         example: "66b1c2d3e4f5a6b7c8d9e0f1"
+ *     requestBody:
+ *       description: Optional cancellation reason
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 maxLength: 500
+ *                 description: Optional reason for cancellation (audit trail)
+ *                 example: "I can't make it"
+ *           examples:
+ *             with_reason:
+ *               value:
+ *                 reason: "I can't make it"
+ *             without_reason:
+ *               value: {}
  *     responses:
  *       200:
- *         description: Booking request canceled successfully (or already canceled - idempotent)
+ *         description: Booking request canceled with effects summary
  *         content:
  *           application/json:
  *             schema:
@@ -672,49 +695,45 @@ router.get(
  *               properties:
  *                 id:
  *                   type: string
- *                 tripId:
- *                   type: string
- *                 passengerId:
- *                   type: string
+ *                   example: "66b1c2d3e4f5a6b7c8d9e0f1"
  *                 status:
  *                   type: string
  *                   enum: [canceled_by_passenger]
- *                 note:
- *                   type: string
- *                 seats:
- *                   type: integer
- *                 createdAt:
- *                   type: string
- *                   format: date-time
+ *                   example: "canceled_by_passenger"
+ *                 effects:
+ *                   type: object
+ *                   properties:
+ *                     ledgerReleased:
+ *                       type: integer
+ *                       description: Seats deallocated (0 for pending, booking.seats for accepted)
+ *                       example: 1
+ *                     refundCreated:
+ *                       type: boolean
+ *                       description: Whether RefundIntent was created (US-4.2)
+ *                       example: true
  *             examples:
- *               canceled:
- *                 summary: Request successfully canceled
- *                 value:
- *                   id: "66b1c2d3e4f5a6b7c8d9e0f1"
- *                   tripId: "66a1b2c3d4e5f6a7b8c9d0e1"
- *                   passengerId: "665e2af1b2c3d4e5f6a7b8c9"
- *                   status: "canceled_by_passenger"
- *                   note: "I have a small bag."
- *                   seats: 1
- *                   createdAt: "2025-10-23T01:15:00.000Z"
- *               already_canceled:
- *                 summary: Already canceled (idempotent)
+ *               accepted_booking:
+ *                 summary: Accepted booking canceled (with seat deallocation)
  *                 value:
  *                   id: "66b1c2d3e4f5a6b7c8d9e0f1"
  *                   status: "canceled_by_passenger"
+ *                   effects:
+ *                     ledgerReleased: 1
+ *                     refundCreated: true
+ *               pending_booking:
+ *                 summary: Pending booking canceled (no seat deallocation)
+ *                 value:
+ *                   id: "66b1c2d3e4f5a6b7c8d9e0f1"
+ *                   status: "canceled_by_passenger"
+ *                   effects:
+ *                     ledgerReleased: 0
+ *                     refundCreated: false
  *       400:
- *         description: Invalid bookingId format
+ *         description: Invalid request (bookingId format or reason too long)
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorValidation'
- *             example:
- *               code: "invalid_schema"
- *               message: "Validation failed"
- *               details:
- *                 - field: "bookingId"
- *                   issue: "bookingId must be a valid MongoDB ObjectId"
- *               correlationId: "123e4567-e89b-12d3-a456-426614174000"
  *       401:
  *         description: Not authenticated
  *         content:
@@ -722,30 +741,18 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorUnauthorized'
  *       403:
- *         description: Forbidden (not owner, not a passenger, or CSRF token missing)
+ *         description: Forbidden (not owner or CSRF token missing)
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorForbidden'
- *             examples:
- *               not_owner:
- *                 summary: Booking request does not belong to the caller
- *                 value:
- *                   code: "forbidden_owner"
- *                   message: "You do not own this booking request"
- *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
- *               forbidden_role:
- *                 summary: Only passengers can cancel booking requests
- *                 value:
- *                   code: "forbidden_role"
- *                   message: "Only passengers can cancel booking requests"
- *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
- *               csrf_missing:
- *                 summary: CSRF token missing or invalid
- *                 value:
- *                   code: "csrf_mismatch"
- *                   message: "CSRF token missing or invalid"
- *                   correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: "forbidden_owner"
+ *                 message:
+ *                   type: string
+ *                   example: "You cannot modify this booking request"
  *       404:
  *         description: Booking request not found
  *         content:
@@ -755,14 +762,12 @@ router.get(
  *               properties:
  *                 code:
  *                   type: string
- *                   example: "not_found"
+ *                   example: "booking_not_found"
  *                 message:
  *                   type: string
  *                   example: "Booking request not found"
- *                 correlationId:
- *                   type: string
  *       409:
- *         description: Conflict (cannot cancel in current state)
+ *         description: Conflict (invalid state transition)
  *         content:
  *           application/json:
  *             schema:
@@ -773,20 +778,16 @@ router.get(
  *                   example: "invalid_state"
  *                 message:
  *                   type: string
- *                 correlationId:
- *                   type: string
- *             example:
- *               code: "invalid_state"
- *               message: "Cannot cancel booking with status: accepted. Only pending bookings can be canceled."
- *               correlationId: "123e4567-e89b-12d3-a456-426614174000"
+ *                   example: "Request cannot be canceled in its current state"
  */
-router.delete(
-  '/bookings/:bookingId',
+router.post(
+  '/bookings/:bookingId/cancel',
   generalRateLimiter,
   authenticate,
   requireRole('passenger'),
   requireCsrf,
   validateRequest(bookingIdParamSchema, 'params'),
+  validateRequest(cancelBookingRequestSchema, 'body'),
   bookingRequestController.cancelMyBookingRequest.bind(bookingRequestController)
 );
 

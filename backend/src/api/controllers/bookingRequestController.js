@@ -177,28 +177,46 @@ class BookingRequestController {
   }
 
   /**
-   * DELETE /passengers/bookings/:bookingId
-   * Cancel a booking request (owner only)
+   * POST /passengers/bookings/:bookingId/cancel
+   * Cancel a booking request with optional reason (US-3.4.3)
+   * 
+   * Owner-only cancellation. If pending, simple status update. If accepted,
+   * runs transaction to decrement seat ledger and set refundNeeded flag.
+   * 
+   * Returns effects summary with ledgerReleased count and refundCreated boolean.
    */
   async cancelMyBookingRequest(req, res, next) {
     try {
       const { bookingId } = req.params;
       const passengerId = req.user.sub;
+      const { reason = '' } = req.body || {};
 
       console.log(
-        `[BookingRequestController] Cancel booking request | bookingId: ${bookingId} | passengerId: ${passengerId} | correlationId: ${req.correlationId}`
+        `[BookingRequestController] Cancel booking request | bookingId: ${bookingId} | passengerId: ${passengerId} | reason: ${reason ? 'provided' : 'none'} | correlationId: ${req.correlationId}`
       );
+
+      // Initialize seat ledger repository for accepted booking cancellations
+      const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
+      const seatLedgerRepository = new MongoSeatLedgerRepository();
 
       // Cancel booking request via service (includes ownership and state checks)
-      const canceledBooking = await this.bookingRequestService.cancelBookingRequest(
+      const cancellationResult = await this.bookingRequestService.cancelBookingRequest(
         bookingId,
-        passengerId
+        passengerId,
+        reason,
+        seatLedgerRepository
       );
 
-      const responseDto = BookingRequestResponseDto.fromDomain(canceledBooking);
+      // Map to integration contract response using DTO
+      const BookingCancellationResultDto = require('../../domain/dtos/BookingCancellationResultDto');
+      const responseDto = BookingCancellationResultDto.fromCancellationResult(
+        cancellationResult.bookingId,
+        cancellationResult.status,
+        cancellationResult.effects
+      );
 
       console.log(
-        `[BookingRequestController] Booking request canceled | bookingId: ${bookingId} | status: ${canceledBooking.status} | correlationId: ${req.correlationId}`
+        `[BookingRequestController] Booking request canceled | bookingId: ${bookingId} | effects: ${JSON.stringify(cancellationResult.effects)} | correlationId: ${req.correlationId}`
       );
 
       res.status(200).json(responseDto);
@@ -208,26 +226,37 @@ class BookingRequestController {
       );
 
       // Map domain errors to HTTP responses
-      if (error instanceof DomainError) {
-        switch (error.code) {
+      if (error instanceof DomainError || error.code) {
+        const errorCode = error.code || 'unknown_error';
+        
+        switch (errorCode) {
           case 'booking_not_found':
             return res.status(404).json({
-              code: 'not_found',
-              message: error.message,
+              code: 'booking_not_found',
+              message: 'Booking request not found',
               correlationId: req.correlationId
             });
 
           case 'ownership_violation':
+          case 'forbidden_owner':
             return res.status(403).json({
               code: 'forbidden_owner',
-              message: error.message,
+              message: 'You cannot modify this booking request',
               correlationId: req.correlationId
             });
 
-          case 'invalid_status_for_cancel':
+          case 'invalid_transition':
+          case 'invalid_state':
             return res.status(409).json({
               code: 'invalid_state',
-              message: error.message,
+              message: 'Request cannot be canceled in its current state',
+              correlationId: req.correlationId
+            });
+
+          case 'transaction_failed':
+            return res.status(500).json({
+              code: 'transaction_failed',
+              message: 'Failed to cancel booking atomically',
               correlationId: req.correlationId
             });
 

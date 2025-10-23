@@ -174,14 +174,16 @@ class MongoBookingRequestRepository {
    * Update booking request status to canceled_by_passenger
    * Used for pending bookings that don't require seat deallocation
    * @param {string} id - Booking request ID
+   * @param {string} reason - Optional cancellation reason for audit trail
    * @returns {Promise<BookingRequest>} Updated booking request
    */
-  async cancel(id) {
+  async cancel(id, reason = '') {
     const doc = await BookingRequestModel.findByIdAndUpdate(
       id,
       {
         status: 'canceled_by_passenger',
-        canceledAt: new Date()
+        canceledAt: new Date(),
+        cancellationReason: reason
       },
       { new: true, runValidators: true }
     );
@@ -199,6 +201,7 @@ class MongoBookingRequestRepository {
    * 1. Booking status updated to canceled_by_passenger
    * 2. Seats deallocated from SeatLedger atomically
    * 3. refundNeeded flag persisted (for US-4.2)
+   * 4. cancellationReason stored for audit trail
    * 
    * @param {BookingRequest} bookingEntity - Booking entity with updated state (from entity.cancelByPassenger)
    * @param {MongoSeatLedgerRepository} seatLedgerRepository - Injected for seat deallocation
@@ -212,12 +215,13 @@ class MongoBookingRequestRepository {
       let updatedBooking = null;
 
       await session.withTransaction(async () => {
-        // 1. Update booking status and set refundNeeded flag
+        // 1. Update booking status, set refundNeeded flag, and store cancellation reason
         const doc = await BookingRequestModel.findByIdAndUpdate(
           bookingEntity.id,
           {
             status: 'canceled_by_passenger',
             canceledAt: new Date(),
+            cancellationReason: bookingEntity.cancellationReason || '',
             refundNeeded: bookingEntity.refundNeeded // Internal flag for US-4.2
           },
           { new: true, runValidators: true, session }

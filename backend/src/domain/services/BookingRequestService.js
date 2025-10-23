@@ -154,25 +154,27 @@ class BookingRequestService {
    * @throws {DomainError} if validation fails
    */
   /**
-   * Cancel a booking request (passenger-initiated)
+   * Cancel a booking request (passenger-initiated) - US-3.4.3
    * 
    * For accepted bookings: Uses MongoDB transaction to atomically:
    * 1. Update booking status to canceled_by_passenger
    * 2. Deallocate seats from SeatLedger
    * 3. Set refundNeeded flag based on payment policy (for future US-4.2)
+   * 4. Store cancellation reason for audit trail
    * 
    * For pending bookings: Simple status update (no transaction needed)
    * 
    * @param {string} bookingId - Booking request ID
    * @param {string} passengerId - Passenger requesting cancellation
+   * @param {string} reason - Optional cancellation reason for audit trail
    * @param {MongoSeatLedgerRepository} seatLedgerRepository - Injected for accepted bookings
-   * @returns {Promise<BookingRequest>} Canceled booking request
+   * @returns {Promise<Object>} Cancellation result with effects { bookingId, status, effects: { ledgerReleased, refundCreated } }
    * @throws {DomainError} if booking not found or ownership violation
    * @throws {InvalidTransitionError} if booking status doesn't allow cancellation
    */
-  async cancelBookingRequest(bookingId, passengerId, seatLedgerRepository = null) {
+  async cancelBookingRequest(bookingId, passengerId, reason = '', seatLedgerRepository = null) {
     console.log(
-      `[BookingRequestService] Canceling booking request | bookingId: ${bookingId} | passengerId: ${passengerId}`
+      `[BookingRequestService] Canceling booking request | bookingId: ${bookingId} | passengerId: ${passengerId} | reason: ${reason ? 'provided' : 'none'}`
     );
 
     // 1. Find booking request
@@ -187,7 +189,7 @@ class BookingRequestService {
       console.log(
         `[BookingRequestService] Ownership violation | bookingId: ${bookingId} | passengerId: ${passengerId} | ownerId: ${bookingRequest.passengerId}`
       );
-      throw new DomainError('You do not own this booking request', 'ownership_violation', 403);
+      throw new DomainError('You cannot modify this booking request', 'forbidden_owner', 403);
     }
 
     // 3. Check if already canceled (idempotent)
@@ -195,7 +197,14 @@ class BookingRequestService {
       console.log(
         `[BookingRequestService] Booking already canceled (idempotent) | bookingId: ${bookingId} | passengerId: ${passengerId}`
       );
-      return bookingRequest; // Return without error
+      return {
+        bookingId: bookingRequest.id,
+        status: 'canceled_by_passenger',
+        effects: {
+          ledgerReleased: 0,
+          refundCreated: false
+        }
+      };
     }
 
     // 4. Validate state transition using entity guard
@@ -204,7 +213,7 @@ class BookingRequestService {
         `[BookingRequestService] Cannot cancel booking with status: ${bookingRequest.status} | bookingId: ${bookingId}`
       );
       throw new InvalidTransitionError(
-        `Cannot cancel booking with status: ${bookingRequest.status}. Only pending or accepted bookings can be canceled.`,
+        `Request cannot be canceled in its current state`,
         bookingRequest.status,
         'canceled_by_passenger',
         409
@@ -213,6 +222,7 @@ class BookingRequestService {
 
     // 5. Determine if seat deallocation is needed (accepted bookings only)
     const needsDeallocation = bookingRequest.needsSeatDeallocation();
+    const seatsToRelease = needsDeallocation ? bookingRequest.seats : 0;
 
     if (needsDeallocation) {
       // Accepted booking: Use transaction for atomic operation
@@ -233,8 +243,8 @@ class BookingRequestService {
       const policyEligible = true; // Placeholder: will check cancellation policy
 
       try {
-        // Use entity method to update status and set refundNeeded flag
-        bookingRequest.cancelByPassenger(isPaid, policyEligible);
+        // Use entity method to update status, set refundNeeded flag, and store reason
+        bookingRequest.cancelByPassenger(isPaid, policyEligible, reason);
 
         // Execute transaction
         const canceledBooking = await this.bookingRequestRepository.cancelWithTransaction(
@@ -246,7 +256,15 @@ class BookingRequestService {
           `[BookingRequestService] Accepted booking canceled | bookingId: ${bookingId} | tripId: ${bookingRequest.tripId} | seats: ${bookingRequest.seats} | refundNeeded: ${bookingRequest.refundNeeded}`
         );
 
-        return canceledBooking;
+        // Return effects summary
+        return {
+          bookingId: canceledBooking.id,
+          status: 'canceled_by_passenger',
+          effects: {
+            ledgerReleased: seatsToRelease,
+            refundCreated: bookingRequest.refundNeeded // TODO: Will be true once payment service integration is done
+          }
+        };
       } catch (error) {
         if (error instanceof InvalidTransitionError) {
           console.log(
@@ -268,14 +286,22 @@ class BookingRequestService {
 
       // Use entity method for consistency (throws InvalidTransitionError if illegal)
       try {
-        bookingRequest.cancelByPassenger(false, false); // Pending bookings: no payment/refund
-        const canceledBooking = await this.bookingRequestRepository.cancel(bookingId);
+        bookingRequest.cancelByPassenger(false, false, reason); // Pending bookings: no payment/refund
+        const canceledBooking = await this.bookingRequestRepository.cancel(bookingId, reason);
 
         console.log(
           `[BookingRequestService] Pending booking canceled | bookingId: ${bookingId} | previousStatus: pending`
         );
 
-        return canceledBooking;
+        // Return effects summary
+        return {
+          bookingId: canceledBooking.id,
+          status: 'canceled_by_passenger',
+          effects: {
+            ledgerReleased: 0, // Pending bookings don't have seats in ledger
+            refundCreated: false // Pending bookings don't trigger refunds
+          }
+        };
       } catch (error) {
         if (error instanceof InvalidTransitionError) {
           console.log(

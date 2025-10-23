@@ -159,11 +159,29 @@ const tripIdParamSchema = Joi.object({
   abortEarly: false
 });
 
+/**
+ * Schema for canceling a booking request (US-3.4.3)
+ * POST /passengers/bookings/:bookingId/cancel
+ */
+const cancelBookingRequestSchema = Joi.object({
+  reason: Joi.string()
+    .trim()
+    .max(500)
+    .optional()
+    .allow('')
+    .messages({
+      'string.max': 'Cancellation reason cannot exceed 500 characters'
+    })
+}).options({
+  abortEarly: false
+});
+
 module.exports = {
   createBookingRequestSchema,
   listBookingRequestsQuerySchema,
   bookingIdParamSchema,
   driverTripBookingRequestsQuerySchema,
-  tripIdParamSchema
+  tripIdParamSchema,
+  cancelBookingRequestSchema
 };
 

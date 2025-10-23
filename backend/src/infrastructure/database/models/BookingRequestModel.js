@@ -89,6 +89,14 @@ const bookingRequestSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    // Optional cancellation reason for passenger-initiated cancellations (US-3.4.3)
+    // Used for audit trail and analytics
+    cancellationReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Cancellation reason cannot exceed 500 characters'],
+      default: ''
+    },
     // Internal flag for refund policy hooks (US-4.2)
     // Set to true when canceled booking is eligible for refund
     // Never exposed in DTOs or API responses

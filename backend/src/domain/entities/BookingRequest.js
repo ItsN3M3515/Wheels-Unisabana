@@ -20,6 +20,7 @@ class BookingRequest {
     declinedAt = null,
     declinedBy = null,
     canceledAt = null,
+    cancellationReason = '', // Optional audit trail for passenger cancellations
     refundNeeded = false, // Internal flag for refund policy hooks
     createdAt = new Date(),
     updatedAt = new Date()
@@ -35,6 +36,7 @@ class BookingRequest {
     this.declinedAt = declinedAt;
     this.declinedBy = declinedBy;
     this.canceledAt = canceledAt;
+    this.cancellationReason = cancellationReason; // Audit trail
     this.refundNeeded = refundNeeded; // Internal flag, never exposed in DTOs
     this.createdAt = createdAt;
     this.updatedAt = new Date();
@@ -162,10 +164,11 @@ class BookingRequest {
    * 
    * @param {boolean} isPaid - Whether the booking was paid (determines refundNeeded flag)
    * @param {boolean} policyEligible - Whether refund policy allows refund (time window check)
+   * @param {string} reason - Optional cancellation reason for audit trail
    * @throws {InvalidTransitionError} if booking cannot be canceled from current state
    * @returns {BookingRequest} this instance for chaining
    */
-  cancelByPassenger(isPaid = false, policyEligible = true) {
+  cancelByPassenger(isPaid = false, policyEligible = true, reason = '') {
     // Idempotent: if already canceled, just return
     if (this.status === 'canceled_by_passenger') {
       return this;
@@ -183,6 +186,7 @@ class BookingRequest {
     // Transition to canceled state
     this.status = 'canceled_by_passenger';
     this.canceledAt = new Date();
+    this.cancellationReason = reason?.trim() || ''; // Store reason for audit
     this.updatedAt = new Date();
 
     // Set refund flag if booking was paid and policy allows
@@ -289,6 +293,7 @@ class BookingRequest {
       declinedAt: this.declinedAt,
       declinedBy: this.declinedBy,
       canceledAt: this.canceledAt,
+      cancellationReason: this.cancellationReason, // Audit trail
       refundNeeded: this.refundNeeded, // Persisted but never exposed in DTOs
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
