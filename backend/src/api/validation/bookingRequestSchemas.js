@@ -108,9 +108,62 @@ const bookingIdParamSchema = Joi.object({
   abortEarly: false
 });
 
+// Schema for driver trip booking requests query (GET /drivers/trips/:tripId/booking-requests)
+const driverTripBookingRequestsQuerySchema = Joi.object({
+  status: Joi.alternatives()
+    .try(
+      Joi.string().valid('pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'),
+      Joi.array().items(Joi.string().valid('pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'))
+    )
+    .optional()
+    .messages({
+      'any.only': 'status must be one of: pending, accepted, declined, canceled_by_passenger, expired'
+    }),
+  page: Joi.number()
+    .integer()
+    .min(1)
+    .default(1)
+    .optional()
+    .messages({
+      'number.base': 'page must be a number',
+      'number.integer': 'page must be an integer',
+      'number.min': 'page must be at least 1'
+    }),
+  pageSize: Joi.number()
+    .integer()
+    .min(1)
+    .max(50)
+    .default(10)
+    .optional()
+    .messages({
+      'number.base': 'pageSize must be a number',
+      'number.integer': 'pageSize must be an integer',
+      'number.min': 'pageSize must be at least 1',
+      'number.max': 'pageSize must not exceed 50'
+    })
+}).options({
+  abortEarly: false,
+  stripUnknown: true
+});
+
+// Schema for tripId parameter
+const tripIdParamSchema = Joi.object({
+  tripId: Joi.string()
+    .pattern(/^[a-f\d]{24}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': 'tripId must be a valid MongoDB ObjectId',
+      'any.required': 'tripId is required'
+    })
+}).options({
+  abortEarly: false
+});
+
 module.exports = {
   createBookingRequestSchema,
   listBookingRequestsQuerySchema,
-  bookingIdParamSchema
+  bookingIdParamSchema,
+  driverTripBookingRequestsQuerySchema,
+  tripIdParamSchema
 };
 

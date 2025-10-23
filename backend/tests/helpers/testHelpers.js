@@ -139,11 +139,136 @@ function cleanupUploads(subfolder = 'vehicles') {
   }
 }
 
+  /**
+   * Create a test user in database
+   */
+  async function createTestUser(role = 'passenger', email = null) {
+    const UserModel = require('../../src/infrastructure/database/models/UserModel');
+    const randomId = Math.floor(300000 + Math.random() * 99999);
+    const corporateEmail = email || `test${randomId}@unisabana.edu.co`;
+
+    const user = await UserModel.create({
+      fullName: `Test ${role === 'driver' ? 'Driver' : 'Passenger'}`,
+      corporateEmail,
+      password: '$2b$10$abcdefghijklmnopqrstuv', // Hashed password
+      role,
+      isEmailVerified: true
+    });
+
+    return {
+      id: user._id.toString(),
+      corporateEmail: user.corporateEmail,
+      role: user.role
+    };
+  }
+
+  /**
+   * Login user and get JWT token
+   */
+  async function loginUser(email, password = 'SecurePass123!') {
+    const { generateToken } = require('../../src/utils/jwt');
+    const UserModel = require('../../src/infrastructure/database/models/UserModel');
+  
+    const user = await UserModel.findOne({ corporateEmail: email });
+    if (!user) {
+      throw new Error(`User not found: ${email}`);
+    }
+
+    return generateToken({ userId: user._id.toString(), role: user.role });
+  }
+
+  /**
+   * Create a test vehicle in database
+   */
+  async function createTestVehicle(ownerId, plate, brand = 'Toyota', model = 'Corolla', year = 2022, capacity = 4) {
+    const VehicleModel = require('../../src/infrastructure/database/models/VehicleModel');
+  
+    const vehicle = await VehicleModel.create({
+      ownerId,
+      brand,
+      model,
+      year,
+      color: 'White',
+      plate,
+      capacity
+    });
+
+    return vehicle._id.toString();
+  }
+
+  /**
+   * Create a test trip in database
+   */
+  async function createTestTrip(driverId, vehicleId, options = {}) {
+    const TripOfferModel = require('../../src/infrastructure/database/models/TripOfferModel');
+  
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const trip = await TripOfferModel.create({
+      driverId,
+      vehicleId,
+      origin: options.origin || {
+        text: 'Universidad de La Sabana',
+        geo: { lat: 4.8611, lng: -74.0315 }
+      },
+      destination: options.destination || {
+        text: 'Centro Comercial Andino',
+        geo: { lat: 4.6706, lng: -74.0554 }
+      },
+      departureAt: options.departureAt || tomorrow,
+      estimatedArrivalAt: options.estimatedArrivalAt || new Date(tomorrow.getTime() + 2 * 60 * 60 * 1000),
+      pricePerSeat: options.pricePerSeat || 15000,
+      totalSeats: options.totalSeats || 3,
+      status: options.status || 'published',
+      notes: options.notes || ''
+    });
+
+    return trip._id.toString();
+  }
+
+  /**
+   * Create a test booking request in database
+   */
+  async function createTestBookingRequest(passengerId, tripId, options = {}) {
+    const BookingRequestModel = require('../../src/infrastructure/database/models/BookingRequestModel');
+  
+    const booking = await BookingRequestModel.create({
+      passengerId,
+      tripId,
+      seats: options.seats || 1,
+      note: options.note || '',
+      status: options.status || 'pending'
+    });
+
+    return booking._id.toString();
+  }
+
+  /**
+   * Cleanup all test data
+   */
+  async function cleanupTestData() {
+    const UserModel = require('../../src/infrastructure/database/models/UserModel');
+    const VehicleModel = require('../../src/infrastructure/database/models/VehicleModel');
+    const TripOfferModel = require('../../src/infrastructure/database/models/TripOfferModel');
+    const BookingRequestModel = require('../../src/infrastructure/database/models/BookingRequestModel');
+
+    await BookingRequestModel.deleteMany({});
+    await TripOfferModel.deleteMany({});
+    await VehicleModel.deleteMany({});
+    await UserModel.deleteMany({ corporateEmail: /@unisabana\.edu\.co/ });
+  }
+
 module.exports = {
   connectTestDB,
   disconnectTestDB,
   clearDatabase,
   createTestUser,
+    loginUser,
+    createTestVehicle,
+    createTestTrip,
+    createTestBookingRequest,
+    cleanupTestData,
   generateRandomPlate,
   createTestImage,
   createLargeTestFile,

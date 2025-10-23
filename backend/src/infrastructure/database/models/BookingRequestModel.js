@@ -36,8 +36,8 @@ const bookingRequestSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['pending', 'canceled_by_passenger', 'expired'],
-        message: 'Status must be one of: pending, canceled_by_passenger, expired'
+        values: ['pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'],
+        message: 'Status must be one of: pending, accepted, declined, canceled_by_passenger, expired'
       },
       default: 'pending',
       index: true
@@ -57,6 +57,25 @@ const bookingRequestSchema = new mongoose.Schema(
       trim: true,
       maxlength: [300, 'Note cannot exceed 300 characters'],
       default: ''
+    },
+    // Audit trail fields for driver decisions
+    acceptedAt: {
+      type: Date,
+      default: null
+    },
+    acceptedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    declinedAt: {
+      type: Date,
+      default: null
+    },
+    declinedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
     },
     canceledAt: {
       type: Date,

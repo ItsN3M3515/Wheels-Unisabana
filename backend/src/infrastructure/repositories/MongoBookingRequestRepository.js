@@ -25,6 +25,10 @@ class MongoBookingRequestRepository {
       status: obj.status,
       seats: obj.seats,
       note: obj.note || '',
+      acceptedAt: obj.acceptedAt,
+      acceptedBy: obj.acceptedBy ? obj.acceptedBy.toString() : null,
+      declinedAt: obj.declinedAt,
+      declinedBy: obj.declinedBy ? obj.declinedBy.toString() : null,
       canceledAt: obj.canceledAt,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt
@@ -199,6 +203,90 @@ class MongoBookingRequestRepository {
       tripId,
       status: 'pending'
     });
+  }
+
+  /**
+   * Find booking requests by trip (driver view)
+   * @param {string} tripId - Trip ID
+   * @param {Object} filters - Optional filters
+   * @param {string|string[]} filters.status - Status filter (single or array)
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.limit - Results per page (default: 10, max: 50)
+   * @returns {Promise<Object>} Paginated results with bookings, total, page, limit, totalPages
+   */
+  async findByTrip(tripId, { status, page = 1, limit = 10 } = {}) {
+    const query = { tripId };
+
+    if (status) {
+      query.status = Array.isArray(status) ? { $in: status } : status;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [docs, total] = await Promise.all([
+      BookingRequestModel.find(query)
+        .sort({ createdAt: -1 }) // Most recent first
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      BookingRequestModel.countDocuments(query)
+    ]);
+
+    return {
+      bookings: this._toDomainArray(docs),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+
+  /**
+   * Update booking request status to accepted (driver decision)
+   * @param {string} id - Booking request ID
+   * @param {string} driverId - Accepting driver ID
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async accept(id, driverId) {
+    const doc = await BookingRequestModel.findByIdAndUpdate(
+      id,
+      {
+        status: 'accepted',
+        acceptedAt: new Date(),
+        acceptedBy: driverId
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) {
+      return null;
+    }
+
+    return this._toDomain(doc);
+  }
+
+  /**
+   * Update booking request status to declined (driver decision)
+   * @param {string} id - Booking request ID
+   * @param {string} driverId - Declining driver ID
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async decline(id, driverId) {
+    const doc = await BookingRequestModel.findByIdAndUpdate(
+      id,
+      {
+        status: 'declined',
+        declinedAt: new Date(),
+        declinedBy: driverId
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) {
+      return null;
+    }
+
+    return this._toDomain(doc);
   }
 
   /**

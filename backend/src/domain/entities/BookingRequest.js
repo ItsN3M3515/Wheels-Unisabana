@@ -13,6 +13,10 @@ class BookingRequest {
     status = 'pending',
     seats = 1,
     note = '',
+    acceptedAt = null,
+    acceptedBy = null,
+    declinedAt = null,
+    declinedBy = null,
     canceledAt = null,
     createdAt = new Date(),
     updatedAt = new Date()
@@ -23,6 +27,10 @@ class BookingRequest {
     this.status = status;
     this.seats = seats;
     this.note = note;
+    this.acceptedAt = acceptedAt;
+    this.acceptedBy = acceptedBy;
+    this.declinedAt = declinedAt;
+    this.declinedBy = declinedBy;
     this.canceledAt = canceledAt;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
@@ -42,7 +50,8 @@ class BookingRequest {
       throw new Error('Passenger ID is required');
     }
 
-    if (!['pending', 'canceled_by_passenger', 'expired'].includes(this.status)) {
+    // Extended status values for US-3.3
+    if (!['pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'].includes(this.status)) {
       throw new Error(`Invalid status: ${this.status}`);
     }
 
@@ -57,10 +66,10 @@ class BookingRequest {
 
   /**
    * Check if this booking is active (not canceled/expired)
-   * Active means: pending
+   * Active means: pending or accepted
    */
   isActive() {
-    return this.status === 'pending';
+    return this.status === 'pending' || this.status === 'accepted';
   }
 
   /**
@@ -68,6 +77,20 @@ class BookingRequest {
    */
   isPending() {
     return this.status === 'pending';
+  }
+
+  /**
+   * Check if this booking has been accepted by driver
+   */
+  isAccepted() {
+    return this.status === 'accepted';
+  }
+
+  /**
+   * Check if this booking has been declined by driver
+   */
+  isDeclined() {
+    return this.status === 'declined';
   }
 
   /**
@@ -82,6 +105,22 @@ class BookingRequest {
    * Only pending requests can be canceled
    */
   canBeCanceledByPassenger() {
+    return this.status === 'pending';
+  }
+
+  /**
+   * Check if this booking can be accepted by driver
+   * Only pending requests can be accepted
+   */
+  canBeAccepted() {
+    return this.status === 'pending';
+  }
+
+  /**
+   * Check if this booking can be declined by driver
+   * Only pending requests can be declined
+   */
+  canBeDeclined() {
     return this.status === 'pending';
   }
 
@@ -124,6 +163,10 @@ class BookingRequest {
       status: this.status,
       seats: this.seats,
       note: this.note,
+      acceptedAt: this.acceptedAt,
+      acceptedBy: this.acceptedBy,
+      declinedAt: this.declinedAt,
+      declinedBy: this.declinedBy,
       canceledAt: this.canceledAt,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
