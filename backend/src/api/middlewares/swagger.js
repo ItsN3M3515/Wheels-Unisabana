@@ -177,6 +177,90 @@ const swaggerOptions = {
             createdAt: { type: 'string', format: 'date-time', example: '2025-10-22T10:00:00.000Z' },
             updatedAt: { type: 'string', format: 'date-time', example: '2025-10-22T10:00:00.000Z' }
           }
+        },
+        // Booking decision (accept/decline) minimal shape
+        BookingDecision: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '66a1b2c3d4e5f6a7b8c9d0e1' },
+            tripId: { type: 'string', example: '66a1b2c3d4e5f6a7b8c9d0e1' },
+            passengerId: { type: 'string', example: '665e2af1b2c3d4e5f6a7b8c9' },
+            status: { type: 'string', enum: ['accepted', 'declined'], example: 'accepted' },
+            decidedAt: { type: 'string', format: 'date-time', example: '2025-10-23T05:00:00.000Z' }
+          }
+        },
+        // Capacity snapshot shape
+        CapacitySnapshot: {
+          type: 'object',
+          properties: {
+            totalSeats: { type: 'integer', example: 3 },
+            allocatedSeats: { type: 'integer', example: 2 },
+            remainingSeats: { type: 'integer', example: 1 }
+          }
+        }
+      },
+      responses: {
+        BookingAccepted: {
+          description: 'Booking accepted successfully',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/BookingDecision' }
+            }
+          }
+        },
+        CapacitySnapshot: {
+          description: 'Capacity snapshot retrieved',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CapacitySnapshot' }
+            }
+          }
+        },
+        ErrorForbiddenOwner: {
+          description: 'Forbidden - Trip not owned by driver',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: { type: 'string', example: 'forbidden_owner' },
+                  message: { type: 'string', example: 'Trip does not belong to the driver' },
+                  correlationId: { type: 'string', example: '123e4567-e89b-12d3-a456-426614174000' }
+                }
+              }
+            }
+          }
+        },
+        ErrorCapacityOrState: {
+          description: 'Conflict - capacity exceeded or invalid booking/trip state',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  code: {
+                    type: 'string',
+                    enum: ['capacity_exceeded', 'invalid_state', 'invalid_trip_state']
+                  },
+                  message: { type: 'string' },
+                  correlationId: { type: 'string', example: '123e4567-e89b-12d3-a456-426614174000' }
+                }
+              },
+              examples: {
+                capacity: { value: { code: 'capacity_exceeded', message: 'No seats remaining for this trip' } },
+                invalidState: { value: { code: 'invalid_state', message: 'Booking request cannot be accepted in its current state' } },
+                invalidTrip: { value: { code: 'invalid_trip_state', message: 'Trip cannot accept new bookings' } }
+              }
+            }
+          }
+        },
+        ErrorInvalidSchema: {
+          description: 'Bad Request - invalid_schema',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorValidation' }
+            }
+          }
         }
       }
     }

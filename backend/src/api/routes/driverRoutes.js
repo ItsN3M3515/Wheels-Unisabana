@@ -156,15 +156,7 @@ router.get(
  *         description: Trip ID (must belong to the authenticated driver)
  *     responses:
  *       200:
- *         description: Capacity snapshot retrieved
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 totalSeats: { type: integer, example: 3 }
- *                 allocatedSeats: { type: integer, example: 2 }
- *                 remainingSeats: { type: integer, example: 1 }
+ *         $ref: '#/components/responses/CapacitySnapshot'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -172,14 +164,7 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorUnauthorized'
  *       403:
- *         description: Trip not owned by driver
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 code: { type: string, example: forbidden_owner }
- *                 message: { type: string, example: Trip does not belong to the driver }
+ *         $ref: '#/components/responses/ErrorForbiddenOwner'
  *       404:
  *         description: Trip not found
  *         content:
@@ -224,17 +209,7 @@ router.get(
  *           pattern: '^[a-f\d]{24}$'
  *     responses:
  *       200:
- *         description: Booking accepted
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
- *                 tripId: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
- *                 passengerId: { type: string, example: "665e2af1b2c3d4e5f6a7b8c9" }
- *                 status: { type: string, example: accepted }
- *                 decidedAt: { type: string, format: date-time, example: "2025-10-23T05:00:00.000Z" }
+ *         $ref: '#/components/responses/BookingAccepted'
  *       401:
  *         description: Unauthorized
  *         content:
@@ -242,14 +217,7 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorUnauthorized'
  *       403:
- *         description: Trip not owned by driver
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 code: { type: string, example: forbidden_owner }
- *                 message: { type: string, example: Trip does not belong to the driver }
+ *         $ref: '#/components/responses/ErrorForbiddenOwner'
  *       404:
  *         description: Booking or trip not found
  *         content:
@@ -260,30 +228,7 @@ router.get(
  *                 code: { type: string, example: booking_not_found }
  *                 message: { type: string, example: Booking request not found }
  *       409:
- *         description: Conflict (capacity exceeded, invalid state, or invalid trip state)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 code:
- *                   type: string
- *                   enum: [capacity_exceeded, invalid_state, invalid_trip_state]
- *                 message:
- *                   type: string
- *             examples:
- *               capacity:
- *                 value:
- *                   code: capacity_exceeded
- *                   message: No seats remaining for this trip
- *               invalidState:
- *                 value:
- *                   code: invalid_state
- *                   message: Booking request cannot be accepted in its current state
- *               invalidTrip:
- *                 value:
- *                   code: invalid_trip_state
- *                   message: Trip cannot accept new bookings
+ *         $ref: '#/components/responses/ErrorCapacityOrState'
  */
 router.post(
   '/booking-requests/:bookingId/accept',
