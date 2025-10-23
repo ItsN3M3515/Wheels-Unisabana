@@ -2,6 +2,9 @@
  * TripOffer Domain Entity
  * Represents a driver's trip offer with origin, destination, timing, pricing, and capacity.
  */
+
+const InvalidTransitionError = require('../errors/InvalidTransitionError');
+
 class TripOffer {
   constructor({
     id,
@@ -64,7 +67,17 @@ class TripOffer {
   }
 
   /**
-   * Check if trip can be canceled
+   * Check if trip is cancelable
+   * Legal states for cancellation: draft, published
+   * Cannot cancel: canceled (already canceled), completed (trip finished)
+   */
+  isCancelable() {
+    return this.status === 'draft' || this.status === 'published';
+  }
+
+  /**
+   * Check if trip can be canceled (legacy; use isCancelable instead)
+   * @deprecated Use isCancelable() for state machine guard
    */
   canBeCanceled() {
     return this.status === 'published' && this.isDepartureInFuture();
@@ -112,11 +125,19 @@ class TripOffer {
   }
 
   /**
-   * Soft cancel the trip
+   * Cancel the trip
+   * Legal transitions: published|draft → canceled
+   * Throws InvalidTransitionError if current state doesn't allow cancellation
+   * 
+   * @throws {InvalidTransitionError} if trip cannot be canceled from current state
    */
   cancel() {
-    if (!this.canBeCanceled() && this.status !== 'draft') {
-      throw new Error(`Cannot cancel trip with status: ${this.status}`);
+    if (!this.isCancelable()) {
+      throw new InvalidTransitionError(
+        `Cannot cancel trip with status: ${this.status}`,
+        this.status,
+        'canceled'
+      );
     }
     this.status = 'canceled';
     this.updatedAt = new Date();

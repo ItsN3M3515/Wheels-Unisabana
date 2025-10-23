@@ -80,6 +80,14 @@ const bookingRequestSchema = new mongoose.Schema(
     canceledAt: {
       type: Date,
       default: null
+    },
+    // Internal flag for refund policy hooks (US-4.2)
+    // Set to true when canceled booking is eligible for refund
+    // Never exposed in DTOs or API responses
+    refundNeeded: {
+      type: Boolean,
+      default: false,
+      select: false // Exclude by default from queries (internal use only)
     }
   },
   {

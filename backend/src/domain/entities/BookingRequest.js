@@ -5,6 +5,8 @@
  * Encapsulates business logic and invariants for booking requests.
  */
 
+const InvalidTransitionError = require('../errors/InvalidTransitionError');
+
 class BookingRequest {
   constructor({
     id,
@@ -18,6 +20,7 @@ class BookingRequest {
     declinedAt = null,
     declinedBy = null,
     canceledAt = null,
+    refundNeeded = false, // Internal flag for refund policy hooks
     createdAt = new Date(),
     updatedAt = new Date()
   }) {
@@ -32,8 +35,9 @@ class BookingRequest {
     this.declinedAt = declinedAt;
     this.declinedBy = declinedBy;
     this.canceledAt = canceledAt;
+    this.refundNeeded = refundNeeded; // Internal flag, never exposed in DTOs
     this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
+    this.updatedAt = new Date();
 
     this.validate();
   }
@@ -101,8 +105,25 @@ class BookingRequest {
   }
 
   /**
-   * Check if this booking can be canceled by passenger
-   * Only pending requests can be canceled
+   * Check if this booking is cancelable by passenger
+   * Legal states for cancellation: pending, accepted
+   * Cannot cancel: already canceled, declined, expired
+   */
+  isCancelableByPassenger() {
+    return this.status === 'pending' || this.status === 'accepted';
+  }
+
+  /**
+   * Check if canceling this booking requires seat deallocation
+   * Only accepted bookings have seats allocated in the ledger
+   */
+  needsSeatDeallocation() {
+    return this.status === 'accepted';
+  }
+
+  /**
+   * Check if this booking can be canceled by passenger (legacy)
+   * @deprecated Use isCancelableByPassenger() for state machine guard
    */
   canBeCanceledByPassenger() {
     return this.status === 'pending';
@@ -126,21 +147,39 @@ class BookingRequest {
 
   /**
    * Cancel this booking request (passenger-initiated)
+   * Legal transitions: pending|accepted → canceled_by_passenger
    * Idempotent: if already canceled, returns without error
+   * 
+   * @param {boolean} isPaid - Whether the booking was paid (determines refundNeeded flag)
+   * @param {boolean} policyEligible - Whether refund policy allows refund (time window check)
+   * @throws {InvalidTransitionError} if booking cannot be canceled from current state
+   * @returns {BookingRequest} this instance for chaining
    */
-  cancelByPassenger() {
+  cancelByPassenger(isPaid = false, policyEligible = true) {
+    // Idempotent: if already canceled, just return
     if (this.status === 'canceled_by_passenger') {
-      // Already canceled, idempotent - just return
       return this;
     }
 
-    if (!this.canBeCanceledByPassenger()) {
-      throw new Error(`Cannot cancel booking with status: ${this.status}. Only pending bookings can be canceled.`);
+    // State guard: only pending or accepted can be canceled
+    if (!this.isCancelableByPassenger()) {
+      throw new InvalidTransitionError(
+        `Cannot cancel booking with status: ${this.status}. Only pending or accepted bookings can be canceled.`,
+        this.status,
+        'canceled_by_passenger'
+      );
     }
 
+    // Transition to canceled state
     this.status = 'canceled_by_passenger';
     this.canceledAt = new Date();
     this.updatedAt = new Date();
+
+    // Set refund flag if booking was paid and policy allows
+    // This flag is checked by refund service (US-4.2) but not exposed in DTOs
+    if (isPaid && policyEligible) {
+      this.refundNeeded = true;
+    }
 
     return this;
   }
@@ -168,6 +207,7 @@ class BookingRequest {
       declinedAt: this.declinedAt,
       declinedBy: this.declinedBy,
       canceledAt: this.canceledAt,
+      refundNeeded: this.refundNeeded, // Persisted but never exposed in DTOs
       createdAt: this.createdAt,
       updatedAt: this.updatedAt
     };

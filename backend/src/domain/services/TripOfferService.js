@@ -3,6 +3,7 @@ const CreateTripOfferDto = require('../dtos/CreateTripOfferDto');
 const UpdateTripOfferDto = require('../dtos/UpdateTripOfferDto');
 const ValidationError = require('../errors/ValidationError');
 const DomainError = require('../errors/DomainError');
+const InvalidTransitionError = require('../errors/InvalidTransitionError');
 
 /**
  * Trip Offer Service
@@ -287,18 +288,28 @@ class TripOfferService {
 
   /**
    * Cancel (soft delete) trip offer
+   * Legal transitions: published|draft → canceled
    * Idempotent: If already canceled, returns the trip without error
+   * Future: Will cascade to bookings (US-3.4 next subtask)
+   * 
+   * @param {string} tripId - Trip ID to cancel
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @returns {Promise<TripOffer>} Canceled trip offer
+   * @throws {DomainError} if trip not found or ownership violation
+   * @throws {InvalidTransitionError} if trip cannot be canceled from current state
    */
   async cancelTripOffer(tripId, driverId) {
+    console.log(`[TripOfferService] Attempting to cancel trip | tripId: ${tripId} | driverId: ${driverId}`);
+
     // Find trip offer
     const tripOffer = await this.tripOfferRepository.findById(tripId);
     if (!tripOffer) {
-      throw new DomainError('Trip offer not found', 'trip_not_found');
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
     }
 
     // Validate ownership
     if (tripOffer.driverId !== driverId) {
-      throw new DomainError('Trip does not belong to the driver', 'ownership_violation');
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation', 403);
     }
 
     // Idempotent: If already canceled, return it (no error)
@@ -309,19 +320,33 @@ class TripOfferService {
       return tripOffer;
     }
 
-    // Validate trip can be canceled
-    if (tripOffer.status === 'completed') {
-      throw new DomainError('Completed trips cannot be canceled', 'cannot_cancel_completed');
+    // Use entity's cancel() method which enforces legal transitions
+    // This will throw InvalidTransitionError if illegal (e.g., completed → canceled)
+    try {
+      tripOffer.cancel();
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.currentState} | attemptedState: ${error.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
     }
 
-    // Cancel trip offer
-    const canceledTripOffer = await this.tripOfferRepository.cancel(tripId);
+    // Persist cancellation
+    const canceledTripOffer = await this.tripOfferRepository.update(tripId, {
+      status: tripOffer.status,
+      updatedAt: tripOffer.updatedAt
+    });
 
     console.log(
       `[TripOfferService] Trip offer canceled | tripId: ${tripId} | driverId: ${driverId} | previousStatus: ${tripOffer.status}`
     );
 
-    // Future: Notify passengers about cancellation (later story)
+    // TODO (US-3.4 next subtask): Cascade to bookings
+    // - pending → declined_auto
+    // - accepted → canceled_by_platform (with refund trigger)
 
     return canceledTripOffer;
   }

@@ -11,6 +11,7 @@
  */
 
 const DomainError = require('../errors/DomainError');
+const InvalidTransitionError = require('../errors/InvalidTransitionError');
 
 class BookingRequestService {
   constructor(bookingRequestRepository, tripOfferRepository) {
@@ -152,7 +153,24 @@ class BookingRequestService {
    * @returns {Promise<BookingRequest>} Canceled booking request
    * @throws {DomainError} if validation fails
    */
-  async cancelBookingRequest(bookingId, passengerId) {
+  /**
+   * Cancel a booking request (passenger-initiated)
+   * 
+   * For accepted bookings: Uses MongoDB transaction to atomically:
+   * 1. Update booking status to canceled_by_passenger
+   * 2. Deallocate seats from SeatLedger
+   * 3. Set refundNeeded flag based on payment policy (for future US-4.2)
+   * 
+   * For pending bookings: Simple status update (no transaction needed)
+   * 
+   * @param {string} bookingId - Booking request ID
+   * @param {string} passengerId - Passenger requesting cancellation
+   * @param {MongoSeatLedgerRepository} seatLedgerRepository - Injected for accepted bookings
+   * @returns {Promise<BookingRequest>} Canceled booking request
+   * @throws {DomainError} if booking not found or ownership violation
+   * @throws {InvalidTransitionError} if booking status doesn't allow cancellation
+   */
+  async cancelBookingRequest(bookingId, passengerId, seatLedgerRepository = null) {
     console.log(
       `[BookingRequestService] Canceling booking request | bookingId: ${bookingId} | passengerId: ${passengerId}`
     );
@@ -161,7 +179,7 @@ class BookingRequestService {
     const bookingRequest = await this.bookingRequestRepository.findById(bookingId);
     if (!bookingRequest) {
       console.log(`[BookingRequestService] Booking not found | bookingId: ${bookingId}`);
-      throw new DomainError('Booking request not found', 'booking_not_found');
+      throw new DomainError('Booking request not found', 'booking_not_found', 404);
     }
 
     // 2. Verify ownership
@@ -169,7 +187,7 @@ class BookingRequestService {
       console.log(
         `[BookingRequestService] Ownership violation | bookingId: ${bookingId} | passengerId: ${passengerId} | ownerId: ${bookingRequest.passengerId}`
       );
-      throw new DomainError('You do not own this booking request', 'ownership_violation');
+      throw new DomainError('You do not own this booking request', 'ownership_violation', 403);
     }
 
     // 3. Check if already canceled (idempotent)
@@ -180,25 +198,94 @@ class BookingRequestService {
       return bookingRequest; // Return without error
     }
 
-    // 4. Check if can be canceled (only pending requests)
-    if (!bookingRequest.canBeCanceledByPassenger()) {
+    // 4. Validate state transition using entity guard
+    if (!bookingRequest.isCancelableByPassenger()) {
       console.log(
         `[BookingRequestService] Cannot cancel booking with status: ${bookingRequest.status} | bookingId: ${bookingId}`
       );
-      throw new DomainError(
-        `Cannot cancel booking with status: ${bookingRequest.status}. Only pending bookings can be canceled.`,
-        'invalid_status_for_cancel'
+      throw new InvalidTransitionError(
+        `Cannot cancel booking with status: ${bookingRequest.status}. Only pending or accepted bookings can be canceled.`,
+        bookingRequest.status,
+        'canceled_by_passenger',
+        409
       );
     }
 
-    // 5. Cancel booking request
-    const canceledBooking = await this.bookingRequestRepository.cancel(bookingId);
+    // 5. Determine if seat deallocation is needed (accepted bookings only)
+    const needsDeallocation = bookingRequest.needsSeatDeallocation();
 
-    console.log(
-      `[BookingRequestService] Booking request canceled | bookingId: ${bookingId} | passengerId: ${passengerId} | previousStatus: ${bookingRequest.status}`
-    );
+    if (needsDeallocation) {
+      // Accepted booking: Use transaction for atomic operation
+      if (!seatLedgerRepository) {
+        throw new DomainError(
+          'Seat ledger repository required for accepted booking cancellation',
+          'missing_dependency',
+          500
+        );
+      }
 
-    return canceledBooking;
+      console.log(
+        `[BookingRequestService] Canceling accepted booking (transaction) | bookingId: ${bookingId} | tripId: ${bookingRequest.tripId} | seats: ${bookingRequest.seats}`
+      );
+
+      // TODO (US-4.2): Fetch payment status and policy eligibility to pass to entity
+      const isPaid = false; // Placeholder: will be determined from payment service
+      const policyEligible = true; // Placeholder: will check cancellation policy
+
+      try {
+        // Use entity method to update status and set refundNeeded flag
+        bookingRequest.cancelByPassenger(isPaid, policyEligible);
+
+        // Execute transaction
+        const canceledBooking = await this.bookingRequestRepository.cancelWithTransaction(
+          bookingRequest,
+          seatLedgerRepository
+        );
+
+        console.log(
+          `[BookingRequestService] Accepted booking canceled | bookingId: ${bookingId} | tripId: ${bookingRequest.tripId} | seats: ${bookingRequest.seats} | refundNeeded: ${bookingRequest.refundNeeded}`
+        );
+
+        return canceledBooking;
+      } catch (error) {
+        if (error instanceof InvalidTransitionError) {
+          console.log(
+            `[BookingRequestService] Invalid state transition | bookingId: ${bookingId} | currentState: ${error.details.currentState} | attemptedState: ${error.details.attemptedState}`
+          );
+          throw error;
+        }
+
+        console.error(
+          `[BookingRequestService] Transaction failed during booking cancellation | bookingId: ${bookingId} | error: ${error.message}`
+        );
+        throw new DomainError('Failed to cancel booking atomically', 'transaction_failed', 500);
+      }
+    } else {
+      // Pending booking: Simple status update (no transaction needed)
+      console.log(
+        `[BookingRequestService] Canceling pending booking (simple) | bookingId: ${bookingId}`
+      );
+
+      // Use entity method for consistency (throws InvalidTransitionError if illegal)
+      try {
+        bookingRequest.cancelByPassenger(false, false); // Pending bookings: no payment/refund
+        const canceledBooking = await this.bookingRequestRepository.cancel(bookingId);
+
+        console.log(
+          `[BookingRequestService] Pending booking canceled | bookingId: ${bookingId} | previousStatus: pending`
+        );
+
+        return canceledBooking;
+      } catch (error) {
+        if (error instanceof InvalidTransitionError) {
+          console.log(
+            `[BookingRequestService] Invalid state transition | bookingId: ${bookingId} | currentState: ${error.details.currentState} | attemptedState: ${error.details.attemptedState}`
+          );
+          throw error;
+        }
+        throw error;
+      }
+    }
   }
 
   /**

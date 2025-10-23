@@ -172,6 +172,7 @@ class MongoBookingRequestRepository {
 
   /**
    * Update booking request status to canceled_by_passenger
+   * Used for pending bookings that don't require seat deallocation
    * @param {string} id - Booking request ID
    * @returns {Promise<BookingRequest>} Updated booking request
    */
@@ -190,6 +191,66 @@ class MongoBookingRequestRepository {
     }
 
     return this._toDomain(doc);
+  }
+
+  /**
+   * Cancel accepted booking request with atomic seat deallocation
+   * Uses MongoDB transaction to ensure:
+   * 1. Booking status updated to canceled_by_passenger
+   * 2. Seats deallocated from SeatLedger atomically
+   * 3. refundNeeded flag persisted (for US-4.2)
+   * 
+   * @param {BookingRequest} bookingEntity - Booking entity with updated state (from entity.cancelByPassenger)
+   * @param {MongoSeatLedgerRepository} seatLedgerRepository - Injected for seat deallocation
+   * @returns {Promise<BookingRequest>} Updated booking request
+   * @throws {Error} if transaction fails or seat deallocation would go negative
+   */
+  async cancelWithTransaction(bookingEntity, seatLedgerRepository) {
+    const session = await BookingRequestModel.startSession();
+
+    try {
+      let updatedBooking = null;
+
+      await session.withTransaction(async () => {
+        // 1. Update booking status and set refundNeeded flag
+        const doc = await BookingRequestModel.findByIdAndUpdate(
+          bookingEntity.id,
+          {
+            status: 'canceled_by_passenger',
+            canceledAt: new Date(),
+            refundNeeded: bookingEntity.refundNeeded // Internal flag for US-4.2
+          },
+          { new: true, runValidators: true, session }
+        );
+
+        if (!doc) {
+          throw new Error(`Booking request not found: ${bookingEntity.id}`);
+        }
+
+        // 2. Atomically deallocate seats from ledger
+        const ledgerUpdated = await seatLedgerRepository.deallocateSeats(
+          bookingEntity.tripId,
+          bookingEntity.seats
+        );
+
+        if (!ledgerUpdated) {
+          throw new Error(
+            `Failed to deallocate seats atomically. Ledger may not exist or would go negative. tripId: ${bookingEntity.tripId}, seats: ${bookingEntity.seats}`
+          );
+        }
+
+        updatedBooking = doc;
+      });
+
+      return updatedBooking ? this._toDomain(updatedBooking) : null;
+    } catch (error) {
+      console.error(
+        `[MongoBookingRequestRepository] Transaction failed during cancellation | bookingId: ${bookingEntity.id} | tripId: ${bookingEntity.tripId} | error: ${error.message}`
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
   /**

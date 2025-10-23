@@ -33,6 +33,59 @@ class MongoSeatLedgerRepository {
   }
 
   /**
+   * Atomically deallocate seats for a trip (free up capacity)
+   * Race-safe: uses conditional update to prevent negative allocation
+   * Used when passenger cancels an accepted booking
+   * 
+   * @param {string} tripId - Trip ObjectId
+   * @param {number} seatsToDeallocate - Number of seats to free (default 1)
+   * @returns {Promise<Object|null>} Updated ledger or null if would go negative
+   */
+  async deallocateSeats(tripId, seatsToDeallocate = 1) {
+    // Guard: cannot deallocate from non-existent ledger
+    const ledger = await SeatLedgerModel.findOne({ tripId });
+    if (!ledger) {
+      console.warn(`[SeatLedgerRepository] No ledger found for trip ${tripId}; cannot deallocate`);
+      return null;
+    }
+
+    // Guard: prevent negative allocatedSeats
+    if (ledger.allocatedSeats < seatsToDeallocate) {
+      console.warn(
+        `[SeatLedgerRepository] Cannot deallocate ${seatsToDeallocate} seats from trip ${tripId}; only ${ledger.allocatedSeats} allocated`
+      );
+      return null;
+    }
+
+    // Atomic decrement with negative guard
+    const updatedLedger = await SeatLedgerModel.findOneAndUpdate(
+      {
+        tripId,
+        allocatedSeats: { $gte: seatsToDeallocate } // Guard: ensure we don't go negative
+      },
+      {
+        $inc: { allocatedSeats: -seatsToDeallocate } // Decrement atomically
+      },
+      {
+        new: true, // Return updated document
+        runValidators: true
+      }
+    );
+
+    if (!updatedLedger) {
+      // Race condition: another operation changed the ledger between our check and update
+      console.warn(`[SeatLedgerRepository] Race condition prevented deallocation for trip ${tripId}`);
+      return null;
+    }
+
+    return {
+      tripId: updatedLedger.tripId.toString(),
+      allocatedSeats: updatedLedger.allocatedSeats,
+      updatedAt: updatedLedger.updatedAt
+    };
+  }
+
+  /**
    * Get current allocation for a trip
    * Creates ledger if it doesn't exist
    * 
