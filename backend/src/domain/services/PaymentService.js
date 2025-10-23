@@ -188,6 +188,126 @@ class PaymentService {
   async getTransactionsByPassengerId(passengerId, options = {}) {
     return await this.transactionRepository.findByPassengerId(passengerId, options);
   }
+
+  /**
+   * Handle webhook event from payment provider (US-4.1.3)
+   * 
+   * Idempotent processing:
+   * 1. Find transaction by providerPaymentIntentId
+   * 2. Check if event already processed (metadata.lastEventId)
+   * 3. Map provider event type to internal status
+   * 4. Update transaction status
+   * 
+   * Supported events:
+   * - payment_intent.succeeded → succeeded
+   * - payment_intent.payment_failed → failed
+   * - payment_intent.canceled → canceled
+   * - payment_intent.processing → processing
+   * 
+   * @param {Object} event - Parsed webhook event
+   * @param {string} event.eventId - Provider event ID (for idempotency)
+   * @param {string} event.type - Event type
+   * @param {Object} event.data - Event data (payment intent object)
+   * @returns {Promise<{ok: boolean, transactionId?: string, alreadyProcessed?: boolean}>}
+   */
+  async handleWebhookEvent(event) {
+    const { eventId, type, data } = event;
+
+    // Extract payment intent ID
+    const providerPaymentIntentId = data.id;
+    if (!providerPaymentIntentId) {
+      throw new Error('Missing payment intent ID in webhook event');
+    }
+
+    // Find transaction
+    const transaction = await this.transactionRepository.findByProviderPaymentIntentId(
+      providerPaymentIntentId
+    );
+
+    // Handle unknown payment intents gracefully (202 accepted, log for investigation)
+    if (!transaction) {
+      console.warn(
+        `Webhook received for unknown payment intent: ${providerPaymentIntentId} (event: ${eventId})`
+      );
+      return {
+        ok: true,
+        message: 'Unknown payment intent (logged for investigation)'
+      };
+    }
+
+    // Idempotency check: Has this event already been processed?
+    if (transaction.metadata && transaction.metadata.lastEventId === eventId) {
+      return {
+        ok: true,
+        transactionId: transaction.id,
+        alreadyProcessed: true
+      };
+    }
+
+    // Map event type to transaction status
+    const statusMap = {
+      'payment_intent.succeeded': 'succeeded',
+      'payment_intent.payment_failed': 'failed',
+      'payment_intent.canceled': 'canceled',
+      'payment_intent.processing': 'processing',
+      'payment_intent.requires_action': 'requires_payment_method',
+      'payment_intent.amount_capturable_updated': 'processing'
+    };
+
+    const newStatus = statusMap[type];
+
+    // Ignore unsupported event types
+    if (!newStatus) {
+      console.info(`Ignoring unsupported webhook event type: ${type}`);
+      return {
+        ok: true,
+        message: `Event type '${type}' not handled`
+      };
+    }
+
+    // Prepare update details
+    const details = {
+      metadata: {
+        ...transaction.metadata,
+        lastEventId: eventId,
+        lastEventType: type,
+        lastEventTimestamp: new Date().toISOString()
+      }
+    };
+
+    // Add error details for failed payments
+    if (newStatus === 'failed' && data.last_payment_error) {
+      details.errorCode = data.last_payment_error.code || 'unknown_error';
+      details.errorMessage = data.last_payment_error.message || 'Payment failed';
+    }
+
+    // Update transaction status
+    try {
+      const updatedTransaction = await this.transactionRepository.updateStatus(
+        transaction.id,
+        newStatus,
+        details
+      );
+
+      return {
+        ok: true,
+        transactionId: updatedTransaction.id,
+        status: updatedTransaction.status
+      };
+    } catch (error) {
+      // If update fails due to invalid transition, it's already in terminal state
+      // This is OK for idempotency (e.g., multiple succeeded events)
+      if (error.message.includes('terminal state')) {
+        return {
+          ok: true,
+          transactionId: transaction.id,
+          alreadyProcessed: true,
+          message: 'Transaction already in terminal state'
+        };
+      }
+      throw error;
+    }
+  }
 }
 
 module.exports = PaymentService;

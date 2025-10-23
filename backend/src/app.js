@@ -16,6 +16,7 @@ const { structuredLogger } = require('./api/middlewares/structuredLogger');
 const userRoutes = require('./api/routes/userRoutes');
 const authRoutes = require('./api/routes/authRoutes');
 const vehicleRoutes = require('./api/routes/vehicleRoutes');
+const webhookRoutes = require('./api/routes/webhookRoutes');
 
 const app = express();
 
@@ -45,6 +46,10 @@ app.use(cookieParser());
 app.use(correlationId);
 app.use(structuredLogger); // Structured logging with PII redaction
 app.use(generalRateLimiter);
+
+// CRITICAL: Webhook routes MUST be mounted BEFORE express.json()
+// Stripe signature verification requires raw body buffer
+app.use('/payments', webhookRoutes);
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
