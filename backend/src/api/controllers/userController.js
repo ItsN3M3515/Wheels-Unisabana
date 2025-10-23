@@ -1,9 +1,14 @@
 const UserService = require('../../domain/services/UserService');
+const AuthService = require('../../domain/services/AuthService');
+const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
 const UpdateProfileDto = require('../../domain/dtos/UpdateProfileDto');
+const { generateCsrfToken, setCsrfCookie } = require('../../utils/csrf');
 
 class UserController {
   constructor() {
     this.userService = new UserService();
+    this.authService = new AuthService();
+    this.userRepository = new MongoUserRepository();
   }
 
   /**
@@ -30,6 +35,29 @@ class UserController {
 
       // Registrar usuario usando el servicio
       const user = await this.userService.registerUser(userData, profilePhoto);
+
+      // Generate JWT token for auto-login after registration
+      const token = this.authService.signAccessToken({
+        sub: user.id,
+        role: user.role,
+        email: user.corporateEmail
+      });
+
+      // Set httpOnly cookie with JWT (auto-login)
+      const isProduction = process.env.NODE_ENV === 'production';
+      const cookieMaxAge = 2 * 60 * 60 * 1000; // 2 hours
+
+      res.cookie('access_token', token, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'strict' : 'lax',
+        maxAge: cookieMaxAge,
+        path: '/'
+      });
+
+      // Generate and set CSRF token
+      const csrfToken = generateCsrfToken();
+      setCsrfCookie(res, csrfToken);
 
       // Respuesta exitosa
       res.status(201).json(user);
@@ -97,6 +125,47 @@ class UserController {
       }
       
       // Otros errores pasan al error handler global
+      next(error);
+    }
+  }
+
+  /**
+   * POST /users/me/toggle-role - Alternar rol entre passenger y driver
+   * 
+   * @param {Object} req - Request with authenticated user
+   * @param {Object} res - Response object
+   * @param {Function} next - Next middleware
+   */
+  async toggleRole(req, res, next) {
+    try {
+      const userId = req.user.sub;
+      
+      // Get current user entity (not DTO)
+      const user = await this.userRepository.findById(userId);
+      
+      if (!user) {
+        return res.status(404).json({
+          code: 'user_not_found',
+          message: 'User not found',
+          correlationId: req.correlationId
+        });
+      }
+      
+      // Toggle role
+      const oldRole = user.role;
+      const newRole = user.role === 'passenger' ? 'driver' : 'passenger';
+      
+      console.log(`[UserController] Toggling role | userId: ${userId} | oldRole: ${oldRole} | newRole: ${newRole}`);
+      
+      // Update user role
+      const updatedUser = await this.userService.updateUserRole(userId, newRole);
+      
+      console.log(`[UserController] Role toggled successfully | userId: ${userId}`);
+      
+      res.status(200).json(updatedUser);
+      
+    } catch (error) {
+      console.error('[UserController] Toggle role error:', error);
       next(error);
     }
   }

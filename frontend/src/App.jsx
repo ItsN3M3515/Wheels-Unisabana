@@ -6,6 +6,9 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import SearchTrips from './pages/passenger/SearchTrips';
 import MyTrips from './pages/driver/MyTrips';
+import MyProfile from './pages/profile/MyProfile';
+import RegisterVehicle from './pages/driver/RegisterVehicle';
+import BecomeDriver from './pages/driver/BecomeDriver';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -57,6 +60,34 @@ export default function App() {
           element={
             <ProtectedRoute requiredRole="driver">
               <MyTrips />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/driver/register-vehicle" 
+          element={
+            <ProtectedRoute requiredRole="driver">
+              <RegisterVehicle />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Profile route (accessible to both roles) */}
+        <Route 
+          path="/profile" 
+          element={
+            <ProtectedRoute>
+              <MyProfile />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Become driver route (only for passengers) */}
+        <Route 
+          path="/become-driver" 
+          element={
+            <ProtectedRoute requiredRole="passenger">
+              <BecomeDriver />
             </ProtectedRoute>
           } 
         />

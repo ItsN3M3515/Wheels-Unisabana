@@ -1,17 +1,22 @@
 const express = require('express');
 const AuthController = require('../controllers/authController');
+const UserController = require('../controllers/userController');
 const validateRequest = require('../middlewares/validateRequest');
 const { loginSchema, passwordResetRequestSchema, passwordResetSchema, passwordChangeSchema } = require('../validation/authSchemas');
-const { loginRateLimiter, passwordResetRateLimiter } = require('../middlewares/rateLimiter');
+const { createUserSchema } = require('../validation/userSchemas');
+const { loginRateLimiter, passwordResetRateLimiter, publicRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
+const { upload, handleUploadError, cleanupOnError } = require('../middlewares/uploadMiddleware');
 
 const router = express.Router();
 const authController = new AuthController();
+const userController = new UserController();
 
 /**
  * AUTH ROUTES
  * 
  * Endpoints:
+ * - POST /auth/register - Register new user
  * - POST /auth/login - Create session (set JWT cookie)
  * - POST /auth/logout - Destroy session (clear cookie)
  * - GET /auth/me - Get current user session/identity (protected)
@@ -23,6 +28,21 @@ const authController = new AuthController();
  * - Secure flag in production (HTTPS only)
  * - SameSite cookies (CSRF protection)
  */
+
+/**
+ * POST /auth/register - Register new user
+ * 
+ * Alias for POST /users endpoint for better REST semantics
+ */
+router.post(
+  '/register',
+  publicRateLimiter,
+  upload.single('profilePhoto'),
+  handleUploadError,
+  cleanupOnError,
+  validateRequest(createUserSchema, 'body'),
+  userController.register.bind(userController)
+);
 
 /**
  * @openapi

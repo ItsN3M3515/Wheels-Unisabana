@@ -120,6 +120,18 @@ router.get(
 );
 
 /**
+ * POST /api/users/me/toggle-role
+ * Toggle user role between passenger and driver
+ */
+router.post(
+  '/me/toggle-role',
+  generalRateLimiter,
+  authenticate,
+  requireCsrf,
+  userController.toggleRole.bind(userController)
+);
+
+/**
  * @openapi
  * /api/users/me:
  *   patch:

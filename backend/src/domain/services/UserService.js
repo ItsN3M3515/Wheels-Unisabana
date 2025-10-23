@@ -208,6 +208,52 @@ class UserService {
       throw error;
     }
   }
+
+  /**
+   * Update user role
+   * 
+   * @param {string} userId - User ID
+   * @param {string} newRole - New role ('passenger' | 'driver')
+   * @returns {Promise<Object>} - Updated user DTO
+   */
+  async updateUserRole(userId, newRole) {
+    try {
+      console.log(`[UserService] Updating user role | userId: ${userId} | newRole: ${newRole}`);
+      
+      // Validate role
+      if (!['passenger', 'driver'].includes(newRole)) {
+        throw new Error('Invalid role. Must be passenger or driver');
+      }
+
+      // Update user role
+      const updatedUser = await this.userRepository.update(userId, { role: newRole });
+      console.log(`[UserService] User role updated in DB | userId: ${userId}`);
+
+      if (!updatedUser) {
+        const error = new Error('User not found');
+        error.code = 'user_not_found';
+        throw error;
+      }
+
+      // Create response DTO with driver.hasVehicle if applicable
+      const userDto = UserResponseDto.fromEntity(updatedUser);
+      console.log(`[UserService] DTO created | role: ${userDto.role}`);
+      
+      if (updatedUser.role === 'driver') {
+        console.log(`[UserService] Checking vehicle status for driver`);
+        const hasVehicle = await this.vehicleRepository.driverHasVehicle(userId);
+        userDto.driver = { hasVehicle };
+        console.log(`[UserService] Vehicle status: ${hasVehicle}`);
+      }
+
+      console.log(`[UserService] Update user role completed successfully`);
+      return userDto;
+
+    } catch (error) {
+      console.error('[UserService] Error in updateUserRole:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = UserService;
