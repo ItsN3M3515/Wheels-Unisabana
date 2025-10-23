@@ -8,16 +8,59 @@
 const BookingRequestService = require('../../domain/services/BookingRequestService');
 const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
 const MongoTripOfferRepository = require('../../infrastructure/repositories/MongoTripOfferRepository');
+const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
 
 // Initialize services
 const bookingRequestRepository = new MongoBookingRequestRepository();
 const tripOfferRepository = new MongoTripOfferRepository();
+const seatLedgerRepository = new MongoSeatLedgerRepository();
 const bookingRequestService = new BookingRequestService(
   bookingRequestRepository,
   tripOfferRepository
 );
 
 class DriverController {
+  /**
+   * GET /drivers/trips/:tripId/capacity
+   * 
+   * Returns a capacity snapshot for a driver's trip.
+   * Owner-only. No CSRF required (read-only).
+   * 
+   * Response: { totalSeats, allocatedSeats, remainingSeats }
+   */
+  async getTripCapacitySnapshot(req, res, next) {
+    try {
+      const { tripId } = req.params;
+      const driverId = req.user.id;
+
+      console.log(
+        `[DriverController] Capacity snapshot | tripId: ${tripId} | driverId: ${driverId}`
+      );
+
+      // 1) Load trip
+      const trip = await tripOfferRepository.findById(tripId);
+      if (!trip) {
+        const DomainError = require('../../domain/errors/DomainError');
+        return next(new DomainError('Trip offer not found', 'trip_not_found', 404));
+      }
+
+      // 2) Ownership check
+      if (trip.driverId !== driverId) {
+        const DomainError = require('../../domain/errors/DomainError');
+        return next(new DomainError('Trip does not belong to the driver', 'forbidden_owner', 403));
+      }
+
+      // 3) Get current ledger (may be null if no allocations yet)
+      const ledger = await seatLedgerRepository.getLedgerByTripId(tripId);
+      const allocatedSeats = ledger ? ledger.allocatedSeats : 0;
+      const totalSeats = trip.totalSeats;
+      const remainingSeats = Math.max(0, totalSeats - allocatedSeats);
+
+      return res.status(200).json({ totalSeats, allocatedSeats, remainingSeats });
+    } catch (err) {
+      return next(err);
+    }
+  }
   /**
    * POST /drivers/booking-requests/:bookingId/decline
    * 

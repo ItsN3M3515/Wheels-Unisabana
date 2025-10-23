@@ -135,6 +135,70 @@ router.get(
 );
 
 /**
+ * @openapi
+ * /drivers/trips/{tripId}/capacity:
+ *   get:
+ *     tags:
+ *       - Trip Offers
+ *     summary: Capacity snapshot for my trip (Driver)
+ *     description: |
+ *       Returns current capacity numbers for a driver's trip. Owner-only.
+ *       Response includes `totalSeats`, `allocatedSeats` (from Seat Ledger), and `remainingSeats`.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tripId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *         description: Trip ID (must belong to the authenticated driver)
+ *     responses:
+ *       200:
+ *         description: Capacity snapshot retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalSeats: { type: integer, example: 3 }
+ *                 allocatedSeats: { type: integer, example: 2 }
+ *                 remainingSeats: { type: integer, example: 1 }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Trip not owned by driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: forbidden_owner }
+ *                 message: { type: string, example: Trip does not belong to the driver }
+ *       404:
+ *         description: Trip not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: trip_not_found }
+ *                 message: { type: string, example: Trip offer not found }
+ */
+router.get(
+  '/trips/:tripId/capacity',
+  authenticate,
+  requireRole('driver'),
+  validateRequest(tripIdParamSchema, 'params'),
+  driverController.getTripCapacitySnapshot
+);
+
+/**
  * @route   POST /drivers/booking-requests/:bookingId/accept
  * @desc    Accept a pending booking request (atomic seat allocation)
  * @access  Private (Driver only)
