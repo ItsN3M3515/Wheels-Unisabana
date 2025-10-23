@@ -443,6 +443,31 @@ class MongoBookingRequestRepository {
   }
 
   /**
+   * Bulk expire old pending bookings (US-3.4.4)
+   * Marks pending bookings as expired when createdAt is older than cutoff time
+   * Idempotent: Only updates bookings with status='pending'
+   * 
+   * @param {Date} cutoffTime - Bookings created before this time will be expired
+   * @returns {Promise<number>} Count of expired bookings
+   */
+  async bulkExpireOldPendings(cutoffTime) {
+    const result = await BookingRequestModel.updateMany(
+      {
+        status: 'pending',
+        createdAt: { $lt: cutoffTime }
+      },
+      {
+        $set: {
+          status: 'expired',
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    return result.modifiedCount;
+  }
+
+  /**
    * Delete booking request (for testing only)
    * @param {string} id - Booking request ID
    * @returns {Promise<boolean>} True if deleted

@@ -516,6 +516,44 @@ class TripOfferService {
   async getUpcomingTripsByDriver(driverId) {
     return this.tripOfferRepository.findUpcomingByDriver(driverId);
   }
+
+  /**
+   * Auto-complete eligible trips (US-3.4.4)
+   * 
+   * Marks published trips as completed when estimatedArrivalAt is in the past.
+   * Idempotent: Already-completed trips are skipped.
+   * 
+   * Used by background jobs or manual admin trigger.
+   * 
+   * @returns {Promise<number>} Count of trips marked as completed
+   */
+  async autoCompleteTrips() {
+    console.log('[TripOfferService] Running auto-complete trips job');
+
+    // Find all published trips where estimatedArrivalAt < now
+    const now = new Date();
+    const eligibleTrips = await this.tripOfferRepository.findPublishedPastArrival(now);
+
+    if (eligibleTrips.length === 0) {
+      console.log('[TripOfferService] No eligible trips to complete');
+      return 0;
+    }
+
+    console.log(
+      `[TripOfferService] Found ${eligibleTrips.length} eligible trips to complete | now: ${now.toISOString()}`
+    );
+
+    // Use bulk update for efficiency
+    const completedCount = await this.tripOfferRepository.bulkCompleteTrips(
+      eligibleTrips.map((trip) => trip.id)
+    );
+
+    console.log(
+      `[TripOfferService] Auto-completed ${completedCount} trips | expected: ${eligibleTrips.length}`
+    );
+
+    return completedCount;
+  }
 }
 
 module.exports = TripOfferService;

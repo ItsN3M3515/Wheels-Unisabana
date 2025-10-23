@@ -552,6 +552,38 @@ class BookingRequestService {
 
     return result;
   }
+
+  /**
+   * Auto-expire old pending bookings (US-3.4.4)
+   * 
+   * Marks pending bookings as expired when they exceed the configured TTL.
+   * Idempotent: Already-expired bookings are skipped.
+   * 
+   * Used by background jobs or manual admin trigger.
+   * 
+   * @param {number} ttlHours - Time-to-live in hours (default: 48 hours)
+   * @returns {Promise<number>} Count of bookings marked as expired
+   */
+  async expirePendingBookings(ttlHours = 48) {
+    console.log(`[BookingRequestService] Running expire pending bookings job | TTL: ${ttlHours}h`);
+
+    // Calculate cutoff time (now - TTL hours)
+    const now = new Date();
+    const cutoffTime = new Date(now.getTime() - ttlHours * 60 * 60 * 1000);
+
+    console.log(
+      `[BookingRequestService] Expiring pending bookings older than | cutoff: ${cutoffTime.toISOString()} | now: ${now.toISOString()}`
+    );
+
+    // Use bulk update for efficiency
+    const expiredCount = await this.bookingRequestRepository.bulkExpireOldPendings(cutoffTime);
+
+    console.log(
+      `[BookingRequestService] Expired ${expiredCount} pending bookings | cutoff: ${cutoffTime.toISOString()}`
+    );
+
+    return expiredCount;
+  }
 }
 
 module.exports = BookingRequestService;

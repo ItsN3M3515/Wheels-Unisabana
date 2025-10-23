@@ -192,6 +192,50 @@ class MongoTripOfferRepository extends TripOfferRepository {
       totalPages: Math.ceil(total / limit)
     };
   }
+
+  /**
+   * Find published trips past their estimated arrival time (US-3.4.4)
+   * Used for auto-completion job
+   * 
+   * @param {Date} now - Current timestamp
+   * @returns {Promise<TripOffer[]>} Array of eligible trips
+   */
+  async findPublishedPastArrival(now) {
+    const docs = await TripOfferModel.find({
+      status: 'published',
+      estimatedArrivalAt: { $lt: now }
+    }).lean();
+
+    return this._toDomainArray(docs);
+  }
+
+  /**
+   * Bulk update trips to completed status (US-3.4.4)
+   * Idempotent: Only updates trips with status='published'
+   * 
+   * @param {string[]} tripIds - Array of trip IDs to complete
+   * @returns {Promise<number>} Count of updated trips
+   */
+  async bulkCompleteTrips(tripIds) {
+    if (!tripIds || tripIds.length === 0) {
+      return 0;
+    }
+
+    const result = await TripOfferModel.updateMany(
+      {
+        _id: { $in: tripIds },
+        status: 'published' // Only complete published trips (idempotent guard)
+      },
+      {
+        $set: {
+          status: 'completed',
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    return result.modifiedCount;
+  }
 }
 
 module.exports = MongoTripOfferRepository;
