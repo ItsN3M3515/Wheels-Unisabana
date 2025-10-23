@@ -13,10 +13,13 @@ class MongoTripOfferRepository extends TripOfferRepository {
   _toDomain(doc) {
     if (!doc) return null;
 
+    // Helper to safely convert ObjectId to string (handles both Mongoose docs and lean objects)
+    const toStr = (val) => val ? val.toString() : val;
+
     return new TripOffer({
-      id: doc._id.toString(),
-      driverId: doc.driverId.toString(),
-      vehicleId: doc.vehicleId.toString(),
+      id: toStr(doc._id),
+      driverId: toStr(doc.driverId),
+      vehicleId: toStr(doc.vehicleId),
       origin: doc.origin,
       destination: doc.destination,
       departureAt: doc.departureAt,
@@ -113,6 +116,81 @@ class MongoTripOfferRepository extends TripOfferRepository {
 
   async countByDriverAndStatus(driverId, status) {
     return TripOfferModel.countDocuments({ driverId, status });
+  }
+
+  /**
+   * Search published trips with filters (for passengers)
+   * Only returns: status='published' AND departureAt > now
+   * 
+   * @param {Object} filters - Search filters
+   * @param {string} filters.qOrigin - Origin text search (case-insensitive)
+   * @param {string} filters.qDestination - Destination text search (case-insensitive)
+   * @param {Date} filters.fromDate - Minimum departure date
+   * @param {Date} filters.toDate - Maximum departure date
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.pageSize - Results per page (default: 10, max: 50)
+   * @returns {Promise<Object>} { trips, total, page, pageSize, totalPages }
+   */
+  async searchPublishedTrips(filters = {}) {
+    const {
+      qOrigin,
+      qDestination,
+      fromDate,
+      toDate,
+      page = 1,
+      pageSize = 10
+    } = filters;
+
+    // Build query
+    const query = {
+      status: 'published',
+      departureAt: { $gt: new Date() } // Only future trips
+    };
+
+    // Text search for origin (case-insensitive, safe regex)
+    if (qOrigin) {
+      // Escape special regex characters
+      const escapedOrigin = qOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query['origin.text'] = { $regex: escapedOrigin, $options: 'i' };
+    }
+
+    // Text search for destination (case-insensitive, safe regex)
+    if (qDestination) {
+      // Escape special regex characters
+      const escapedDestination = qDestination.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query['destination.text'] = { $regex: escapedDestination, $options: 'i' };
+    }
+
+    // Date range filters
+    if (fromDate) {
+      query.departureAt.$gte = new Date(fromDate);
+    }
+
+    if (toDate) {
+      query.departureAt.$lte = new Date(toDate);
+    }
+
+    // Pagination
+    const skip = (page - 1) * pageSize;
+    const limit = Math.min(pageSize, 50); // Max 50 results per page
+
+    // Execute query
+    const [docs, total] = await Promise.all([
+      TripOfferModel.find(query)
+        .sort({ departureAt: 1 }) // Sort by departure ascending (soonest first)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      TripOfferModel.countDocuments(query)
+    ]);
+
+    return {
+      trips: this._toDomainArray(docs),
+      total,
+      page,
+      pageSize: limit,
+      totalPages: Math.ceil(total / limit)
+    };
   }
 }
 

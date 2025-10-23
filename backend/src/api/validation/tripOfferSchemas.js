@@ -231,10 +231,78 @@ const tripIdParamSchema = Joi.object({
   abortEarly: false
 });
 
+// Schema for passenger trip search (query parameters)
+const searchTripsQuerySchema = Joi.object({
+  qOrigin: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .messages({
+      'string.min': 'qOrigin must be at least 1 character',
+      'string.max': 'qOrigin must not exceed 100 characters'
+    }),
+  qDestination: Joi.string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .messages({
+      'string.min': 'qDestination must be at least 1 character',
+      'string.max': 'qDestination must not exceed 100 characters'
+    }),
+  fromDate: Joi.date()
+    .iso()
+    .optional()
+    .messages({
+      'date.format': 'fromDate must be a valid ISO 8601 date',
+      'date.base': 'fromDate must be a valid date'
+    }),
+  toDate: Joi.date()
+    .iso()
+    .optional()
+    .when('fromDate', {
+      is: Joi.exist(),
+      then: Joi.date().min(Joi.ref('fromDate')).messages({
+        'date.min': 'toDate must be after fromDate'
+      })
+    })
+    .messages({
+      'date.format': 'toDate must be a valid ISO 8601 date',
+      'date.base': 'toDate must be a valid date'
+    }),
+  page: Joi.number()
+    .integer()
+    .min(1)
+    .default(1)
+    .optional()
+    .messages({
+      'number.base': 'page must be a number',
+      'number.integer': 'page must be an integer',
+      'number.min': 'page must be at least 1'
+    }),
+  pageSize: Joi.number()
+    .integer()
+    .min(1)
+    .max(50)
+    .default(10)
+    .optional()
+    .messages({
+      'number.base': 'pageSize must be a number',
+      'number.integer': 'pageSize must be an integer',
+      'number.min': 'pageSize must be at least 1',
+      'number.max': 'pageSize must not exceed 50'
+    })
+}).options({
+  abortEarly: false,
+  stripUnknown: true
+});
+
 module.exports = {
   createTripOfferSchema,
   updateTripOfferSchema,
   listTripsQuerySchema,
-  tripIdParamSchema
+  tripIdParamSchema,
+  searchTripsQuerySchema
 };
 

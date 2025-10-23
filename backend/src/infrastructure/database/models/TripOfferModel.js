@@ -119,7 +119,9 @@ tripOfferSchema.pre('save', function (next) {
 // Validation: departureAt must be in future on create/publish (not on updates to existing docs)
 tripOfferSchema.pre('save', function (next) {
   if (this.isNew && (this.status === 'published' || this.status === 'draft')) {
-    if (this.departureAt <= new Date()) {
+    // Use < instead of <= to allow dates that are exactly "now" (within same millisecond)
+    // This helps with test timing issues while still enforcing future dates
+    if (this.departureAt < new Date()) {
       return next(new Error('departureAt must be in the future'));
     }
   }

@@ -65,10 +65,12 @@ app.get('/health', (req, res) => {
 
 // API Routes
 const tripOfferRoutes = require('./api/routes/tripOfferRoutes');
+const passengerRoutes = require('./api/routes/passengerRoutes');
 app.use('/api/users', userRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/drivers', vehicleRoutes);
 app.use('/drivers', tripOfferRoutes);
+app.use('/passengers', passengerRoutes);
 
 // Swagger Documentation
 serveSwagger(app);

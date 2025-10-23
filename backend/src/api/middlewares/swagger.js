@@ -30,7 +30,8 @@ const swaggerOptions = {
       { name: 'Users', description: 'Gestión de usuarios' },
       { name: 'Vehicles', description: 'Gestión de vehículos (drivers)' },
       { name: 'Authentication', description: 'Autenticación y sesiones' },
-      { name: 'Trip Offers', description: 'Gestión de ofertas de viajes (drivers)' }
+      { name: 'Trip Offers', description: 'Gestión de ofertas de viajes (drivers)' },
+      { name: 'Passenger Trips', description: 'Búsqueda y reserva de viajes (passengers)' }
     ],
     components: {
       securitySchemes: {
