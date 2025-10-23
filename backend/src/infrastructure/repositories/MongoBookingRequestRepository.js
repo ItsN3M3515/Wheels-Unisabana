@@ -30,6 +30,7 @@ class MongoBookingRequestRepository {
       declinedAt: obj.declinedAt,
       declinedBy: obj.declinedBy ? obj.declinedBy.toString() : null,
       canceledAt: obj.canceledAt,
+      isPaid: obj.isPaid || false, // US-4.1.5: Payment status
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt
     });
@@ -465,6 +466,29 @@ class MongoBookingRequestRepository {
     );
 
     return result.modifiedCount;
+  }
+
+  /**
+   * Mark booking as paid (US-4.1.5)
+   * Updates isPaid flag when payment transaction succeeds
+   * Idempotent: Safe to call multiple times
+   * 
+   * @param {string} bookingId - Booking request ID
+   * @returns {Promise<BookingRequest|null>} Updated booking or null if not found
+   */
+  async markAsPaid(bookingId) {
+    const doc = await BookingRequestModel.findByIdAndUpdate(
+      bookingId,
+      {
+        $set: {
+          isPaid: true,
+          updatedAt: new Date()
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    return this._toDomain(doc);
   }
 
   /**

@@ -22,6 +22,7 @@ class BookingRequest {
     canceledAt = null,
     cancellationReason = '', // Optional audit trail for passenger cancellations
     refundNeeded = false, // Internal flag for refund policy hooks
+    isPaid = false, // US-4.1.5: Payment status (read model sync)
     createdAt = new Date(),
     updatedAt = new Date()
   }) {
@@ -38,6 +39,7 @@ class BookingRequest {
     this.canceledAt = canceledAt;
     this.cancellationReason = cancellationReason; // Audit trail
     this.refundNeeded = refundNeeded; // Internal flag, never exposed in DTOs
+    this.isPaid = isPaid; // US-4.1.5: Payment status
     this.createdAt = createdAt;
     this.updatedAt = new Date();
 

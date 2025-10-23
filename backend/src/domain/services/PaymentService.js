@@ -289,6 +289,19 @@ class PaymentService {
         details
       );
 
+      // US-4.1.5: Sync booking status when payment succeeds
+      if (newStatus === 'succeeded') {
+        try {
+          await this.bookingRequestRepository.markAsPaid(transaction.bookingId);
+        } catch (syncError) {
+          // Log but don't fail webhook (payment already succeeded)
+          console.error(
+            `Failed to sync booking isPaid status for booking ${transaction.bookingId}:`,
+            syncError.message
+          );
+        }
+      }
+
       return {
         ok: true,
         transactionId: updatedTransaction.id,

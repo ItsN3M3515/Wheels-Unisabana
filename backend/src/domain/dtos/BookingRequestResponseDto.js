@@ -19,6 +19,7 @@ class BookingRequestResponseDto {
     seats,
     note,
     canceledAt,
+    isPaid = false, // US-4.1.5: Payment status
     createdAt,
     updatedAt,
     // Optional populated trip data (for list responses)
@@ -31,6 +32,7 @@ class BookingRequestResponseDto {
     this.seats = seats;
     this.note = note;
     this.canceledAt = canceledAt;
+    this.isPaid = isPaid; // US-4.1.5: Payment status
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
 
@@ -62,6 +64,7 @@ class BookingRequestResponseDto {
       seats: bookingRequest.seats,
       note: bookingRequest.note,
       canceledAt: bookingRequest.canceledAt,
+      isPaid: bookingRequest.isPaid || false, // US-4.1.5
       createdAt: bookingRequest.createdAt,
       updatedAt: bookingRequest.updatedAt
     });
@@ -83,6 +86,7 @@ class BookingRequestResponseDto {
       seats: obj.seats,
       note: obj.note || '',
       canceledAt: obj.canceledAt,
+      isPaid: obj.isPaid || false, // US-4.1.5
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
       // Include populated trip if available

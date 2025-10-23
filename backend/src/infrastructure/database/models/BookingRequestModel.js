@@ -104,6 +104,14 @@ const bookingRequestSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
       select: false // Exclude by default from queries (internal use only)
+    },
+    // Payment status flag (US-4.1.5)
+    // Set to true when payment transaction succeeds
+    // Used for read model sync and display purposes
+    isPaid: {
+      type: Boolean,
+      default: false,
+      index: true // For filtering paid/unpaid bookings
     }
   },
   {
