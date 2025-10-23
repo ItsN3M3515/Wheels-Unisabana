@@ -26,6 +26,23 @@ class CreateTripOfferDto {
   }
 
   /**
+   * Create DTO from request body
+   */
+  static fromRequest(body) {
+    return new CreateTripOfferDto({
+      vehicleId: body.vehicleId,
+      origin: body.origin,
+      destination: body.destination,
+      departureAt: body.departureAt,
+      estimatedArrivalAt: body.estimatedArrivalAt,
+      pricePerSeat: body.pricePerSeat,
+      totalSeats: body.totalSeats,
+      status: body.status || 'published',
+      notes: body.notes || ''
+    });
+  }
+
+  /**
    * Validate DTO structure
    */
   validate() {

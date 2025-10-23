@@ -96,6 +96,20 @@ class MongoVehicleRepository extends VehicleRepository {
   }
 
   /**
+   * Find vehicle by ID
+   * @param {string} vehicleId - Vehicle ID
+   * @returns {Promise<Vehicle|null>} - Vehicle or null
+   */
+  async findById(vehicleId) {
+    try {
+      const vehicle = await VehicleModel.findById(vehicleId);
+      return vehicle ? Vehicle.fromDocument(vehicle) : null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Find vehicle by driver ID
    * @param {string} driverId - Driver ID
    * @returns {Promise<Vehicle|null>} - Vehicle or null

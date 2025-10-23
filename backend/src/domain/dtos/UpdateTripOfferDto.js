@@ -12,6 +12,18 @@ class UpdateTripOfferDto {
   }
 
   /**
+   * Create DTO from request body
+   */
+  static fromRequest(body) {
+    return new UpdateTripOfferDto({
+      pricePerSeat: body.pricePerSeat,
+      totalSeats: body.totalSeats,
+      notes: body.notes,
+      status: body.status
+    });
+  }
+
+  /**
    * Validate DTO structure
    */
   validate() {

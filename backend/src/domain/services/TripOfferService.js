@@ -42,7 +42,7 @@ class TripOfferService {
       throw new DomainError('Vehicle not found', 'vehicle_not_found');
     }
 
-    if (vehicle.ownerId !== driverId) {
+    if (vehicle.driverId !== driverId) {
       throw new DomainError(
         'Vehicle does not belong to the driver',
         'vehicle_ownership_violation'
@@ -84,7 +84,7 @@ class TripOfferService {
 
       if (overlappingTrips.length > 0) {
         throw new DomainError(
-          'You have another published trip during this time window',
+          'You have another overlapping published trip during this time window',
           'overlapping_trip'
         );
       }
@@ -129,6 +129,55 @@ class TripOfferService {
    */
   async getTripOffersByDriver(driverId, filters = {}) {
     return this.tripOfferRepository.findByDriverId(driverId, filters);
+  }
+
+  /**
+   * List trip offers with pagination and filters
+   */
+  async listTripOffers(filters = {}, options = {}) {
+    const { page = 1, limit = 10 } = options;
+    const skip = (page - 1) * limit;
+
+    // Get total count
+    const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
+    const total = await TripOfferModel.countDocuments(filters);
+
+    // Get paginated results (sorted by departure date descending - most recent first)
+    const docs = await TripOfferModel
+      .find(filters)
+      .sort({ departureAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Map to domain entities using repository private method
+    const TripOffer = require('../entities/TripOffer');
+    const trips = docs.map(doc => {
+      return new TripOffer({
+        id: doc._id.toString(),
+        driverId: doc.driverId.toString(),
+        vehicleId: doc.vehicleId.toString(),
+        origin: doc.origin,
+        destination: doc.destination,
+        departureAt: doc.departureAt,
+        estimatedArrivalAt: doc.estimatedArrivalAt,
+        pricePerSeat: doc.pricePerSeat,
+        totalSeats: doc.totalSeats,
+        status: doc.status,
+        notes: doc.notes,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt
+      });
+    });
+
+    return {
+      data: trips,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    };
   }
 
   /**
@@ -184,6 +233,9 @@ class TripOfferService {
     // Validate totalSeats does not exceed vehicle capacity
     if (updateDto.totalSeats !== undefined) {
       const vehicle = await this.vehicleRepository.findById(tripOffer.vehicleId);
+      if (!vehicle) {
+        throw new DomainError('Vehicle not found', 'vehicle_not_found');
+      }
       if (updateDto.totalSeats > vehicle.capacity) {
         throw new DomainError(
           `totalSeats (${updateDto.totalSeats}) exceeds vehicle capacity (${vehicle.capacity})`,
@@ -210,7 +262,7 @@ class TripOfferService {
 
       if (overlappingTrips.length > 0) {
         throw new DomainError(
-          'You have another published trip during this time window',
+          'You have another overlapping published trip during this time window',
           'overlapping_trip'
         );
       }
@@ -235,6 +287,7 @@ class TripOfferService {
 
   /**
    * Cancel (soft delete) trip offer
+   * Idempotent: If already canceled, returns the trip without error
    */
   async cancelTripOffer(tripId, driverId) {
     // Find trip offer
@@ -245,23 +298,27 @@ class TripOfferService {
 
     // Validate ownership
     if (tripOffer.driverId !== driverId) {
-      throw new DomainError('You do not own this trip offer', 'ownership_violation');
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation');
+    }
+
+    // Idempotent: If already canceled, return it (no error)
+    if (tripOffer.status === 'canceled') {
+      console.log(
+        `[TripOfferService] Trip already canceled (idempotent) | tripId: ${tripId} | driverId: ${driverId}`
+      );
+      return tripOffer;
     }
 
     // Validate trip can be canceled
-    if (tripOffer.status === 'canceled') {
-      throw new DomainError('Trip is already canceled', 'already_canceled');
-    }
-
     if (tripOffer.status === 'completed') {
-      throw new DomainError('Cannot cancel completed trip', 'cannot_cancel_completed');
+      throw new DomainError('Completed trips cannot be canceled', 'cannot_cancel_completed');
     }
 
     // Cancel trip offer
     const canceledTripOffer = await this.tripOfferRepository.cancel(tripId);
 
     console.log(
-      `[TripOfferService] Trip offer canceled | tripId: ${tripId} | driverId: ${driverId}`
+      `[TripOfferService] Trip offer canceled | tripId: ${tripId} | driverId: ${driverId} | previousStatus: ${tripOffer.status}`
     );
 
     // Future: Notify passengers about cancellation (later story)

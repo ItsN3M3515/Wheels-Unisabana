@@ -28,7 +28,9 @@ const swaggerOptions = {
     tags: [
       { name: 'System', description: 'Endpoints del sistema' },
       { name: 'Users', description: 'Gestión de usuarios' },
-      { name: 'Vehicles', description: 'Gestión de vehículos (drivers)' }
+      { name: 'Vehicles', description: 'Gestión de vehículos (drivers)' },
+      { name: 'Authentication', description: 'Autenticación y sesiones' },
+      { name: 'Trip Offers', description: 'Gestión de ofertas de viajes (drivers)' }
     ],
     components: {
       securitySchemes: {
@@ -131,6 +133,49 @@ const swaggerOptions = {
             phone: { type: 'string', pattern: '^\\+[1-9]\\d{1,14}$', example: '+573001112233' }
           },
           description: 'At least one field required'
+        },
+        // Trip Offer Schemas
+        TripOfferResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '66a1b2c3d4e5f6a7b8c9d0e1' },
+            driverId: { type: 'string', example: '665e2af1b2c3d4e5f6a7b8c9' },
+            vehicleId: { type: 'string', example: '6680a1b2c3d4e5f6a7b8c9d0' },
+            origin: {
+              type: 'object',
+              properties: {
+                text: { type: 'string', example: 'Campus Norte' },
+                geo: {
+                  type: 'object',
+                  properties: {
+                    lat: { type: 'number', example: 4.703 },
+                    lng: { type: 'number', example: -74.041 }
+                  }
+                }
+              }
+            },
+            destination: {
+              type: 'object',
+              properties: {
+                text: { type: 'string', example: 'Campus Sur' },
+                geo: {
+                  type: 'object',
+                  properties: {
+                    lat: { type: 'number', example: 4.627 },
+                    lng: { type: 'number', example: -74.064 }
+                  }
+                }
+              }
+            },
+            departureAt: { type: 'string', format: 'date-time', example: '2025-11-01T07:30:00.000Z' },
+            estimatedArrivalAt: { type: 'string', format: 'date-time', example: '2025-11-01T08:10:00.000Z' },
+            pricePerSeat: { type: 'number', example: 6000 },
+            totalSeats: { type: 'integer', example: 3 },
+            status: { type: 'string', enum: ['draft', 'published', 'canceled', 'completed'], example: 'published' },
+            notes: { type: 'string', example: 'Two backpacks max.' },
+            createdAt: { type: 'string', format: 'date-time', example: '2025-10-22T10:00:00.000Z' },
+            updatedAt: { type: 'string', format: 'date-time', example: '2025-10-22T10:00:00.000Z' }
+          }
         }
       }
     }

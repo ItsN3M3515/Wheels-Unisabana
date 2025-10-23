@@ -28,10 +28,8 @@ describe('Password Management - Complete Integration Tests (Subtask 2.3.5)', () 
 
   beforeAll(async () => {
     await connectDB();
-  });
-
-  beforeEach(async () => {
-    // Clean up test data before each test
+    
+    // Clean up test data
     await UserModel.deleteMany({ 
       corporateEmail: { 
         $regex: /pwtest.*@unisabana\.edu\.co/i
@@ -39,7 +37,7 @@ describe('Password Management - Complete Integration Tests (Subtask 2.3.5)', () 
     });
     await PasswordResetTokenModel.deleteMany({});
     
-    // Create fresh test user for each test
+    // Create test user ONCE
     const hashedPassword = await bcrypt.hash(testUserPassword, 10);
     testUser = await UserModel.create({
       role: 'passenger',
@@ -50,6 +48,27 @@ describe('Password Management - Complete Integration Tests (Subtask 2.3.5)', () 
       phone: '+573001112222',
       password: hashedPassword
     });
+  });
+
+  beforeEach(async () => {
+    // Clean ALL tokens before each test
+    await PasswordResetTokenModel.deleteMany({});
+    
+    // Reset the user's password to the original for each test
+    const hashedPassword = await bcrypt.hash(testUserPassword, 10);
+    const updatedUser = await UserModel.findByIdAndUpdate(
+      testUser._id,
+      { password: hashedPassword },
+      { new: true, runValidators: false } // Return updated document
+    );
+    
+    // Verify the user still exists and update our reference
+    if (!updatedUser) {
+      throw new Error('Test user was deleted or not found!');
+    }
+    
+    // Update the testUser reference to keep it in sync
+    testUser = updatedUser;
   });
 
   afterAll(async () => {
@@ -107,16 +126,11 @@ describe('Password Management - Complete Integration Tests (Subtask 2.3.5)', () 
         // CRITICAL: Same response as existing email
         expect(res.body).toEqual({ ok: true });
 
-        // No token should be created
-        const tokenRecord = await PasswordResetTokenModel.findOne({
-          userId: testUser._id
-        }).sort({ createdAt: -1 });
-
-        // Previous token should still be there, no new one
+        // No token should be created for non-existent user
         const tokenCount = await PasswordResetTokenModel.countDocuments({
           userId: testUser._id
         });
-        expect(tokenCount).toBe(1); // Only the one from previous test
+        expect(tokenCount).toBe(0); // No token for our test user (email doesn't match)
       });
 
       it('should invalidate previous active tokens when requesting new one', async () => {
