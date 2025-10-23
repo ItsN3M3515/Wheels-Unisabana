@@ -319,4 +319,125 @@ router.post(
   driverController.declineBookingRequest
 );
 
+/**
+ * @route   DELETE /drivers/trips/:tripId
+ * @desc    Cancel a trip with cascade to all bookings (US-3.4.2)
+ * @access  Private (Driver only, owner-only)
+ */
+/**
+ * @openapi
+ * /drivers/trips/{tripId}:
+ *   delete:
+ *     tags:
+ *       - Trip Offers
+ *     summary: Cancel trip with cascade (Driver)
+ *     description: |
+ *       Cancel a trip owned by the authenticated driver.
+ *       Atomically performs:
+ *       - Cancel trip (published|draft → canceled)
+ *       - Decline all pending bookings (→ declined_auto)
+ *       - Cancel all accepted bookings (→ canceled_by_platform)
+ *       - Deallocate seats from ledger
+ *       - Set refundNeeded flag for paid accepted bookings (triggers US-4.2)
+ * 
+ *       Returns effects summary with counts.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tripId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *         description: Trip ID (must belong to the authenticated driver)
+ *     responses:
+ *       200:
+ *         description: Trip canceled with effects summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   example: "66a1b2c3d4e5f6a7b8c9d0e1"
+ *                 status:
+ *                   type: string
+ *                   enum: [canceled]
+ *                   example: "canceled"
+ *                 effects:
+ *                   type: object
+ *                   properties:
+ *                     declinedAuto:
+ *                       type: integer
+ *                       example: 4
+ *                       description: Count of pending bookings auto-declined
+ *                     canceledByPlatform:
+ *                       type: integer
+ *                       example: 2
+ *                       description: Count of accepted bookings canceled by platform
+ *                     refundsCreated:
+ *                       type: integer
+ *                       example: 2
+ *                       description: Count of RefundIntents created (US-4.2)
+ *                     ledgerReleased:
+ *                       type: integer
+ *                       example: 2
+ *                       description: Count of seat ledger releases
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Trip not owned by driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: forbidden_owner
+ *                 message:
+ *                   type: string
+ *                   example: Trip does not belong to the driver
+ *       404:
+ *         description: Trip not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: trip_not_found
+ *                 message:
+ *                   type: string
+ *                   example: Trip offer not found
+ *       409:
+ *         description: Invalid state transition (already canceled or completed)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   example: invalid_transition
+ *                 message:
+ *                   type: string
+ *                   example: Trip is already canceled or completed
+ */
+router.delete(
+  '/trips/:tripId',
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(tripIdParamSchema, 'params'),
+  driverController.cancelTrip
+);
+
 module.exports = router;

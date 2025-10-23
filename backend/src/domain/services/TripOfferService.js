@@ -352,6 +352,165 @@ class TripOfferService {
   }
 
   /**
+   * Cancel trip offer with cascade to all bookings (US-3.4.2)
+   * 
+   * Atomically:
+   * 1. Cancel trip (published|draft → canceled)
+   * 2. Decline all pending bookings (→ declined_auto)
+   * 3. Cancel all accepted bookings (→ canceled_by_platform)
+   * 4. Deallocate seats from ledger for each accepted booking
+   * 5. Set refundNeeded flag for paid accepted bookings
+   * 
+   * @param {string} tripId - Trip ID to cancel
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @param {MongoBookingRequestRepository} bookingRequestRepository - Injected for cascade
+   * @param {MongoSeatLedgerRepository} seatLedgerRepository - Injected for seat deallocation
+   * @returns {Promise<Object>} Cancellation result with effects summary
+   * @throws {DomainError} if trip not found or ownership violation (403)
+   * @throws {InvalidTransitionError} if trip cannot be canceled from current state (409)
+   */
+  async cancelTripWithCascade(tripId, driverId, bookingRequestRepository, seatLedgerRepository) {
+    console.log(
+      `[TripOfferService] Attempting cascade cancellation | tripId: ${tripId} | driverId: ${driverId}`
+    );
+
+    // 1. Find trip offer
+    const tripOffer = await this.tripOfferRepository.findById(tripId);
+    if (!tripOffer) {
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
+    }
+
+    // 2. Validate ownership
+    if (tripOffer.driverId !== driverId) {
+      console.log(
+        `[TripOfferService] Ownership violation | tripId: ${tripId} | driverId: ${driverId} | ownerId: ${tripOffer.driverId}`
+      );
+      throw new DomainError('Trip does not belong to the driver', 'forbidden_owner', 403);
+    }
+
+    // 3. Idempotent: If already canceled, return empty effects
+    if (tripOffer.status === 'canceled') {
+      console.log(
+        `[TripOfferService] Trip already canceled (idempotent) | tripId: ${tripId}`
+      );
+      return {
+        tripId,
+        status: 'canceled',
+        effects: {
+          declinedAuto: 0,
+          canceledByPlatform: 0,
+          refundsCreated: 0,
+          ledgerReleased: 0
+        }
+      };
+    }
+
+    // 4. Validate state transition using entity guard
+    try {
+      tripOffer.cancel(); // Dry run for validation
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.details.currentState} | attemptedState: ${error.details.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
+    }
+
+    // 5. Query all bookings for cascade (outside transaction for efficiency)
+    const [pendingBookings, acceptedBookings] = await Promise.all([
+      bookingRequestRepository.findAllPendingByTrip(tripId),
+      bookingRequestRepository.findAllAcceptedByTrip(tripId)
+    ]);
+
+    console.log(
+      `[TripOfferService] Found bookings for cascade | tripId: ${tripId} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
+    );
+
+    // 6. Execute cascade transaction
+    const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
+    const session = await TripOfferModel.startSession();
+
+    try {
+      let effects = {
+        declinedAuto: 0,
+        canceledByPlatform: 0,
+        refundsCreated: 0,
+        ledgerReleased: 0
+      };
+
+      await session.withTransaction(async () => {
+        // a) Update trip status to canceled
+        await TripOfferModel.findByIdAndUpdate(
+          tripId,
+          {
+            status: 'canceled',
+            updatedAt: new Date()
+          },
+          { session }
+        );
+
+        // b) Bulk decline all pending bookings (→ declined_auto)
+        if (pendingBookings.length > 0) {
+          effects.declinedAuto = await bookingRequestRepository.bulkDeclineAuto(tripId, session);
+        }
+
+        // c) Bulk cancel all accepted bookings (→ canceled_by_platform)
+        // This also sets refundNeeded = true for all (platform cancellations always refund)
+        if (acceptedBookings.length > 0) {
+          effects.canceledByPlatform = await bookingRequestRepository.bulkCancelByPlatform(
+            tripId,
+            session
+          );
+
+          // d) Deallocate seats for each accepted booking
+          // Note: We use the total allocated seats from ledger, not per-booking
+          // The ledger tracks aggregate, so we release all at once
+          const totalSeatsToRelease = acceptedBookings.reduce((sum, booking) => sum + booking.seats, 0);
+
+          if (totalSeatsToRelease > 0) {
+            const ledgerReleased = await seatLedgerRepository.deallocateSeats(
+              tripId,
+              totalSeatsToRelease
+            );
+
+            if (!ledgerReleased) {
+              throw new Error(
+                `Failed to deallocate seats atomically. Ledger may not exist or would go negative. tripId: ${tripId}, seats: ${totalSeatsToRelease}`
+              );
+            }
+
+            effects.ledgerReleased = acceptedBookings.length; // Count of bookings, not seats
+          }
+
+          // TODO (US-4.2): Create RefundIntents for paid accepted bookings
+          // For now, we just count potential refunds (all accepted bookings get refundNeeded=true)
+          // The actual refund creation will happen in payment service
+          effects.refundsCreated = effects.canceledByPlatform; // Placeholder count
+        }
+      });
+
+      console.log(
+        `[TripOfferService] Cascade completed | tripId: ${tripId} | effects: ${JSON.stringify(effects)}`
+      );
+
+      return {
+        tripId,
+        status: 'canceled',
+        effects
+      };
+    } catch (error) {
+      console.error(
+        `[TripOfferService] Transaction failed during cascade | tripId: ${tripId} | error: ${error.message}`
+      );
+      throw new DomainError('Failed to cancel trip atomically', 'transaction_failed', 500);
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
    * Get upcoming published trips by driver
    */
   async getUpcomingTripsByDriver(driverId) {

@@ -230,6 +230,103 @@ class DriverController {
       next(error);
     }
   }
+
+  /**
+   * DELETE /drivers/trips/:tripId
+   * 
+   * Cancel a trip with cascade to all bookings (US-3.4.2).
+   * 
+   * Owner-only endpoint. Atomically:
+   * 1. Cancel trip (published|draft → canceled)
+   * 2. Decline all pending bookings (→ declined_auto)
+   * 3. Cancel all accepted bookings (→ canceled_by_platform)
+   * 4. Deallocate seats from ledger
+   * 5. Set refundNeeded flag for paid accepted bookings
+   * 
+   * Returns effects summary with counts.
+   * 
+   * Response:
+   * - 200: Trip canceled with effects summary
+   * - 403: forbidden_owner (trip not owned by driver)
+   * - 404: trip_not_found
+   * - 409: invalid_transition (trip already canceled or completed)
+   */
+  async cancelTrip(req, res, next) {
+    try {
+      const { tripId } = req.params;
+      const driverId = req.user.id;
+
+      console.log(
+        `[DriverController] Canceling trip with cascade | tripId: ${tripId} | driverId: ${driverId}`
+      );
+
+      // Initialize TripOfferService with repositories
+      const TripOfferService = require('../../domain/services/TripOfferService');
+      const MongoVehicleRepository = require('../../infrastructure/repositories/MongoVehicleRepository');
+      const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
+
+      const vehicleRepository = new MongoVehicleRepository();
+      const userRepository = new MongoUserRepository();
+      const tripOfferService = new TripOfferService(
+        tripOfferRepository,
+        vehicleRepository,
+        userRepository
+      );
+
+      // Call cascade cancellation service
+      const result = await tripOfferService.cancelTripWithCascade(
+        tripId,
+        driverId,
+        bookingRequestRepository,
+        seatLedgerRepository
+      );
+
+      console.log(
+        `[DriverController] Trip canceled successfully | tripId: ${tripId} | effects: ${JSON.stringify(result.effects)}`
+      );
+
+      // Map to integration contract response
+      const TripCancellationResultDto = require('../../domain/dtos/TripCancellationResultDto');
+      const responseDto = TripCancellationResultDto.fromCancellationResult(
+        result.tripId,
+        result.status,
+        result.effects
+      );
+
+      res.status(200).json(responseDto);
+    } catch (error) {
+      // Map domain errors to expected HTTP status codes
+      if (error && error.code) {
+        const DomainError = require('../../domain/errors/DomainError');
+        const InvalidTransitionError = require('../../domain/errors/InvalidTransitionError');
+
+        switch (error.code) {
+          case 'forbidden_owner':
+            return next(
+              new DomainError('Trip does not belong to the driver', 'forbidden_owner', 403)
+            );
+          case 'trip_not_found':
+            return next(new DomainError('Trip offer not found', 'trip_not_found', 404));
+          case 'invalid_transition':
+            return next(
+              new InvalidTransitionError(
+                'Trip is already canceled or completed',
+                error.details?.currentState || 'unknown',
+                error.details?.attemptedState || 'canceled',
+                409
+              )
+            );
+          case 'transaction_failed':
+            return next(
+              new DomainError('Failed to cancel trip atomically', 'transaction_failed', 500)
+            );
+          default:
+            break; // fall through to global error handler
+        }
+      }
+      next(error);
+    }
+  }
 }
 
 module.exports = new DriverController();

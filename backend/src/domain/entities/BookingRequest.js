@@ -54,8 +54,18 @@ class BookingRequest {
       throw new Error('Passenger ID is required');
     }
 
-    // Extended status values for US-3.3
-    if (!['pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'].includes(this.status)) {
+    // Extended status values for US-3.3 and US-3.4
+    const validStatuses = [
+      'pending',
+      'accepted',
+      'declined',
+      'declined_auto', // US-3.4.2: Driver cancels trip
+      'canceled_by_passenger',
+      'canceled_by_platform', // US-3.4.2: Driver cancels trip
+      'expired'
+    ];
+    
+    if (!validStatuses.includes(this.status)) {
       throw new Error(`Invalid status: ${this.status}`);
     }
 
@@ -178,6 +188,78 @@ class BookingRequest {
     // Set refund flag if booking was paid and policy allows
     // This flag is checked by refund service (US-4.2) but not exposed in DTOs
     if (isPaid && policyEligible) {
+      this.refundNeeded = true;
+    }
+
+    return this;
+  }
+
+  /**
+   * Automatically decline this booking (driver canceled trip)
+   * Legal transition: pending → declined_auto
+   * Used when driver cancels entire trip (cascade operation)
+   * 
+   * @throws {InvalidTransitionError} if booking is not pending
+   * @returns {BookingRequest} this instance for chaining
+   */
+  declineAuto() {
+    // Idempotent: if already declined_auto, just return
+    if (this.status === 'declined_auto') {
+      return this;
+    }
+
+    // State guard: only pending bookings can be auto-declined
+    if (this.status !== 'pending') {
+      throw new InvalidTransitionError(
+        `Cannot auto-decline booking with status: ${this.status}. Only pending bookings can be auto-declined.`,
+        this.status,
+        'declined_auto'
+      );
+    }
+
+    // Transition to declined_auto state
+    this.status = 'declined_auto';
+    this.declinedAt = new Date();
+    this.declinedBy = 'system'; // System-initiated decline
+    this.updatedAt = new Date();
+
+    return this;
+  }
+
+  /**
+   * Cancel this booking by platform (driver canceled trip)
+   * Legal transition: accepted → canceled_by_platform
+   * Used when driver cancels entire trip (cascade operation)
+   * 
+   * For paid bookings: Sets refundNeeded flag (always true for platform cancellations)
+   * 
+   * @param {boolean} isPaid - Whether the booking was paid (determines refundNeeded flag)
+   * @throws {InvalidTransitionError} if booking is not accepted
+   * @returns {BookingRequest} this instance for chaining
+   */
+  cancelByPlatform(isPaid = false) {
+    // Idempotent: if already canceled_by_platform, just return
+    if (this.status === 'canceled_by_platform') {
+      return this;
+    }
+
+    // State guard: only accepted bookings can be platform-canceled
+    if (this.status !== 'accepted') {
+      throw new InvalidTransitionError(
+        `Cannot platform-cancel booking with status: ${this.status}. Only accepted bookings can be platform-canceled.`,
+        this.status,
+        'canceled_by_platform'
+      );
+    }
+
+    // Transition to canceled_by_platform state
+    this.status = 'canceled_by_platform';
+    this.canceledAt = new Date();
+    this.updatedAt = new Date();
+
+    // Platform cancellations always trigger refunds if booking was paid
+    // (Policy is 100% refund for driver-initiated cancellations)
+    if (isPaid) {
       this.refundNeeded = true;
     }
 

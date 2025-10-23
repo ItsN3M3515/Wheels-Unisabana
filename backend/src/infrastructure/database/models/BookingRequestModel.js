@@ -36,8 +36,16 @@ const bookingRequestSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['pending', 'accepted', 'declined', 'canceled_by_passenger', 'expired'],
-        message: 'Status must be one of: pending, accepted, declined, canceled_by_passenger, expired'
+        values: [
+          'pending',
+          'accepted',
+          'declined',
+          'declined_auto', // US-3.4.2: Auto-declined when driver cancels trip
+          'canceled_by_passenger',
+          'canceled_by_platform', // US-3.4.2: Canceled when driver cancels trip
+          'expired'
+        ],
+        message: 'Status must be one of: pending, accepted, declined, declined_auto, canceled_by_passenger, canceled_by_platform, expired'
       },
       default: 'pending',
       index: true

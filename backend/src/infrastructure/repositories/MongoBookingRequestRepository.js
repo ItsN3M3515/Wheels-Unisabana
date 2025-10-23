@@ -351,6 +351,94 @@ class MongoBookingRequestRepository {
   }
 
   /**
+   * Find all pending bookings for a trip (no pagination)
+   * Used for cascade operations when driver cancels trip
+   * @param {string} tripId - Trip ID
+   * @returns {Promise<BookingRequest[]>} Array of pending bookings
+   */
+  async findAllPendingByTrip(tripId) {
+    const docs = await BookingRequestModel.find({
+      tripId,
+      status: 'pending'
+    }).lean();
+
+    return this._toDomainArray(docs);
+  }
+
+  /**
+   * Find all accepted bookings for a trip (no pagination)
+   * Used for cascade operations when driver cancels trip
+   * @param {string} tripId - Trip ID
+   * @returns {Promise<BookingRequest[]>} Array of accepted bookings
+   */
+  async findAllAcceptedByTrip(tripId) {
+    const docs = await BookingRequestModel.find({
+      tripId,
+      status: 'accepted'
+    }).lean();
+
+    return this._toDomainArray(docs);
+  }
+
+  /**
+   * Bulk update pending bookings to declined_auto
+   * Used when driver cancels trip (cascade operation)
+   * Returns count of updated documents
+   * 
+   * @param {string} tripId - Trip ID
+   * @param {ClientSession} session - MongoDB session for transaction
+   * @returns {Promise<number>} Count of updated bookings
+   */
+  async bulkDeclineAuto(tripId, session = null) {
+    const result = await BookingRequestModel.updateMany(
+      {
+        tripId,
+        status: 'pending'
+      },
+      {
+        $set: {
+          status: 'declined_auto',
+          declinedAt: new Date(),
+          declinedBy: 'system',
+          updatedAt: new Date()
+        }
+      },
+      { session }
+    );
+
+    return result.modifiedCount;
+  }
+
+  /**
+   * Bulk update accepted bookings to canceled_by_platform
+   * Used when driver cancels trip (cascade operation)
+   * Returns count of updated documents
+   * 
+   * @param {string} tripId - Trip ID
+   * @param {ClientSession} session - MongoDB session for transaction
+   * @returns {Promise<number>} Count of updated bookings
+   */
+  async bulkCancelByPlatform(tripId, session = null) {
+    const result = await BookingRequestModel.updateMany(
+      {
+        tripId,
+        status: 'accepted'
+      },
+      {
+        $set: {
+          status: 'canceled_by_platform',
+          canceledAt: new Date(),
+          refundNeeded: true, // Platform cancellations always trigger refunds
+          updatedAt: new Date()
+        }
+      },
+      { session }
+    );
+
+    return result.modifiedCount;
+  }
+
+  /**
    * Delete booking request (for testing only)
    * @param {string} id - Booking request ID
    * @returns {Promise<boolean>} True if deleted
