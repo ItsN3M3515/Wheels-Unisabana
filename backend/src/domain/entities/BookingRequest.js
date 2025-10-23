@@ -42,7 +42,7 @@ class BookingRequest {
       throw new Error('Passenger ID is required');
     }
 
-    if (!['pending', 'canceled_by_passenger', 'accepted', 'declined', 'expired'].includes(this.status)) {
+    if (!['pending', 'canceled_by_passenger', 'expired'].includes(this.status)) {
       throw new Error(`Invalid status: ${this.status}`);
     }
 
@@ -56,11 +56,11 @@ class BookingRequest {
   }
 
   /**
-   * Check if this booking is active (not canceled/declined/expired)
-   * Active means: pending or accepted
+   * Check if this booking is active (not canceled/expired)
+   * Active means: pending
    */
   isActive() {
-    return ['pending', 'accepted'].includes(this.status);
+    return this.status === 'pending';
   }
 
   /**

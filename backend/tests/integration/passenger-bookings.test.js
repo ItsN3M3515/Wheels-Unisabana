@@ -48,24 +48,47 @@ describe('Passenger Search and Booking Integration Tests', () => {
   });
 
   afterAll(async () => {
+    // Final cleanup
+    await Promise.all([
+      UserModel.deleteMany({ corporateEmail: { $regex: /passengerbookingtest.*@unisabana\.edu\.co/i } }),
+      VehicleModel.deleteMany({ plate: { $regex: /^PBT/ } }),
+      TripOfferModel.deleteMany({ notes: { $regex: /Trip with status/ } }),
+      BookingRequestModel.deleteMany({})
+    ]);
     await require('mongoose').connection.close();
   });
 
+  afterEach(async () => {
+    // Cleanup after each test
+    await Promise.all([
+      BookingRequestModel.deleteMany({}),
+      TripOfferModel.deleteMany({ notes: { $regex: /Trip with status/ } })
+    ]);
+  });
+
   beforeEach(async () => {
-    // Cleanup
-    await UserModel.deleteMany({ corporateEmail: { $regex: /passengerbookingtest.*@unisabana\.edu\.co/i } });
-    await VehicleModel.deleteMany({});
-    await TripOfferModel.deleteMany({});
-    await BookingRequestModel.deleteMany({});
+    // Cleanup - delete test data only (wait for completion)
+    await Promise.all([
+      UserModel.deleteMany({ corporateEmail: { $regex: /passengerbookingtest.*@unisabana\.edu\.co/i } }),
+      VehicleModel.deleteMany({ plate: { $regex: /^PBT/ } }),
+      TripOfferModel.deleteMany({ notes: { $regex: /Trip with status/ } }),
+      BookingRequestModel.deleteMany({})
+    ]);
+
+    // Small delay to ensure database cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     // Create test users
     const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
 
+    // Generate unique IDs for this test run
+    const uniqueId = Date.now().toString().slice(-6);
+    
     driver = await UserModel.create({
       role: 'driver',
       firstName: 'PassengerBookingTest',
       lastName: 'Driver',
-      universityId: '999100',
+      universityId: `9991${uniqueId}00`,
       corporateEmail: 'passengerbookingtest-driver@unisabana.edu.co',
       phone: '+573001111111',
       password: hashedPassword
@@ -75,7 +98,7 @@ describe('Passenger Search and Booking Integration Tests', () => {
       role: 'passenger',
       firstName: 'PassengerBookingTest',
       lastName: 'Passenger1',
-      universityId: '999101',
+      universityId: `9991${uniqueId}01`,
       corporateEmail: 'passengerbookingtest-passenger1@unisabana.edu.co',
       phone: '+573002222222',
       password: hashedPassword
@@ -85,7 +108,7 @@ describe('Passenger Search and Booking Integration Tests', () => {
       role: 'passenger',
       firstName: 'PassengerBookingTest',
       lastName: 'Passenger2',
-      universityId: '999102',
+      universityId: `9991${uniqueId}02`,
       corporateEmail: 'passengerbookingtest-passenger2@unisabana.edu.co',
       phone: '+573003333333',
       password: hashedPassword

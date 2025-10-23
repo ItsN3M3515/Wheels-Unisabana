@@ -197,7 +197,7 @@ class MongoBookingRequestRepository {
   async countActiveBookingsForTrip(tripId) {
     return BookingRequestModel.countDocuments({
       tripId,
-      status: { $in: ['pending', 'accepted'] }
+      status: 'pending'
     });
   }
 

@@ -26,20 +26,18 @@ const bookingRequestSchema = new mongoose.Schema(
     tripId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TripOffer',
-      required: [true, 'Trip ID is required'],
-      index: true
+      required: [true, 'Trip ID is required']
     },
     passengerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Passenger ID is required'],
-      index: true
+      required: [true, 'Passenger ID is required']
     },
     status: {
       type: String,
       enum: {
-        values: ['pending', 'canceled_by_passenger', 'accepted', 'declined', 'expired'],
-        message: 'Status must be one of: pending, canceled_by_passenger, accepted, declined, expired'
+        values: ['pending', 'canceled_by_passenger', 'expired'],
+        message: 'Status must be one of: pending, canceled_by_passenger, expired'
       },
       default: 'pending',
       index: true
@@ -102,10 +100,10 @@ bookingRequestSchema.index({ passengerId: 1, tripId: 1, status: 1 });
 
 /**
  * Check if this booking request is active (not canceled/declined/expired)
- * Active statuses: pending, accepted
+ * Active statuses: pending
  */
 bookingRequestSchema.methods.isActive = function () {
-  return ['pending', 'accepted'].includes(this.status);
+  return this.status === 'pending';
 };
 
 /**
@@ -157,7 +155,7 @@ bookingRequestSchema.statics.findActiveBooking = async function (passengerId, tr
 bookingRequestSchema.statics.countActiveBookingsForTrip = async function (tripId) {
   return this.countDocuments({
     tripId,
-    status: { $in: ['pending', 'accepted'] }
+    status: 'pending'
   });
 };
 
