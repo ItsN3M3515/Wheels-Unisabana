@@ -1119,6 +1119,508 @@
         }
       }
     },
+    "/drivers/trips/{tripId}/booking-requests": {
+      "get": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "List booking requests for my trip (Driver)",
+        "description": "Returns booking requests for a trip owned by the authenticated driver.\nSupports filtering by status and pagination.\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tripId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            },
+            "description": "Trip ID (must belong to the authenticated driver)"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "accepted",
+                    "declined",
+                    "canceled_by_passenger",
+                    "expired"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "accepted",
+                      "declined",
+                      "canceled_by_passenger",
+                      "expired"
+                    ]
+                  }
+                }
+              ]
+            },
+            "description": "Filter by one or more statuses"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking requests retrieved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                          },
+                          "tripId": {
+                            "type": "string",
+                            "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                          },
+                          "passengerId": {
+                            "type": "string",
+                            "example": "665e2af1b2c3d4e5f6a7b8c9"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "accepted",
+                              "declined",
+                              "canceled_by_passenger",
+                              "expired"
+                            ],
+                            "example": "pending"
+                          },
+                          "seats": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "note": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": "Window seat please"
+                          },
+                          "acceptedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "declinedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "canceledAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "example": 10
+                    },
+                    "total": {
+                      "type": "integer",
+                      "example": 3
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "example": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Trip not owned by driver",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "forbidden_owner"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip does not belong to the driver"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "trip_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip offer not found"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers/booking-requests/{bookingId}/accept": {
+      "post": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "Accept a booking request (Driver)",
+        "description": "Accepts a pending booking request. Seats are allocated atomically.\nRequires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bookingId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                    },
+                    "tripId": {
+                      "type": "string",
+                      "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                    },
+                    "passengerId": {
+                      "type": "string",
+                      "example": "665e2af1b2c3d4e5f6a7b8c9"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "accepted"
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-10-23T05:00:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Trip not owned by driver",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "forbidden_owner"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip does not belong to the driver"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Booking or trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "booking_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Booking request not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (capacity exceeded, invalid state, or invalid trip state)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "capacity_exceeded",
+                        "invalid_state",
+                        "invalid_trip_state"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "capacity": {
+                    "value": {
+                      "code": "capacity_exceeded",
+                      "message": "No seats remaining for this trip"
+                    }
+                  },
+                  "invalidState": {
+                    "value": {
+                      "code": "invalid_state",
+                      "message": "Booking request cannot be accepted in its current state"
+                    }
+                  },
+                  "invalidTrip": {
+                    "value": {
+                      "code": "invalid_trip_state",
+                      "message": "Trip cannot accept new bookings"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers/booking-requests/{bookingId}/decline": {
+      "post": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "Decline a booking request (Driver)",
+        "description": "Declines a pending booking request. Operation is idempotent: already declined returns 200.\nRequires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bookingId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking declined (or already declined)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                    },
+                    "tripId": {
+                      "type": "string",
+                      "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                    },
+                    "passengerId": {
+                      "type": "string",
+                      "example": "665e2af1b2c3d4e5f6a7b8c9"
+                    },
+                    "status": {
+                      "type": "string",
+                      "example": "declined"
+                    },
+                    "decidedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-10-23T05:00:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Trip not owned by driver",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "forbidden_owner"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip does not belong to the driver"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Booking or trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "booking_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Booking request not found"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict - invalid state (e.g., already accepted)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "invalid_state"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Booking request cannot be declined in its current state"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/passengers/trips/search": {
       "get": {
         "tags": [

@@ -27,6 +27,105 @@ const {
  * @query   {number} page - Optional page number (default: 1)
  * @query   {number} pageSize - Optional page size (default: 10, max: 50)
  */
+/**
+ * @openapi
+ * /drivers/trips/{tripId}/booking-requests:
+ *   get:
+ *     tags:
+ *       - Trip Offers
+ *     summary: List booking requests for my trip (Driver)
+ *     description: |
+ *       Returns booking requests for a trip owned by the authenticated driver.
+ *       Supports filtering by status and pagination.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tripId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *         description: Trip ID (must belong to the authenticated driver)
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           oneOf:
+ *             - type: string
+ *               enum: [pending, accepted, declined, canceled_by_passenger, expired]
+ *             - type: array
+ *               items:
+ *                 type: string
+ *                 enum: [pending, accepted, declined, canceled_by_passenger, expired]
+ *         description: Filter by one or more statuses
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *       - in: query
+ *         name: pageSize
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: Booking requests retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                       tripId: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                       passengerId: { type: string, example: "665e2af1b2c3d4e5f6a7b8c9" }
+ *                       status: { type: string, enum: [pending, accepted, declined, canceled_by_passenger, expired], example: "pending" }
+ *                       seats: { type: integer, example: 1 }
+ *                       note: { type: string, nullable: true, example: "Window seat please" }
+ *                       acceptedAt: { type: string, format: date-time, nullable: true }
+ *                       declinedAt: { type: string, format: date-time, nullable: true }
+ *                       canceledAt: { type: string, format: date-time, nullable: true }
+ *                       createdAt: { type: string, format: date-time }
+ *                 page: { type: integer, example: 1 }
+ *                 pageSize: { type: integer, example: 10 }
+ *                 total: { type: integer, example: 3 }
+ *                 totalPages: { type: integer, example: 1 }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Trip not owned by driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: forbidden_owner }
+ *                 message: { type: string, example: Trip does not belong to the driver }
+ *       404:
+ *         description: Trip not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: trip_not_found }
+ *                 message: { type: string, example: Trip offer not found }
+ */
 router.get(
   '/trips/:tripId/booking-requests',
   authenticate,
@@ -40,6 +139,88 @@ router.get(
  * @desc    Accept a pending booking request (atomic seat allocation)
  * @access  Private (Driver only)
  */
+/**
+ * @openapi
+ * /drivers/booking-requests/{bookingId}/accept:
+ *   post:
+ *     tags:
+ *       - Trip Offers
+ *     summary: Accept a booking request (Driver)
+ *     description: |
+ *       Accepts a pending booking request. Seats are allocated atomically.
+ *       Requires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *     responses:
+ *       200:
+ *         description: Booking accepted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                 tripId: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                 passengerId: { type: string, example: "665e2af1b2c3d4e5f6a7b8c9" }
+ *                 status: { type: string, example: accepted }
+ *                 decidedAt: { type: string, format: date-time, example: "2025-10-23T05:00:00.000Z" }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Trip not owned by driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: forbidden_owner }
+ *                 message: { type: string, example: Trip does not belong to the driver }
+ *       404:
+ *         description: Booking or trip not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: booking_not_found }
+ *                 message: { type: string, example: Booking request not found }
+ *       409:
+ *         description: Conflict (capacity exceeded, invalid state, or invalid trip state)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code:
+ *                   type: string
+ *                   enum: [capacity_exceeded, invalid_state, invalid_trip_state]
+ *                 message:
+ *                   type: string
+ *             examples:
+ *               capacity:
+ *                 value:
+ *                   code: capacity_exceeded
+ *                   message: No seats remaining for this trip
+ *               invalidState:
+ *                 value:
+ *                   code: invalid_state
+ *                   message: Booking request cannot be accepted in its current state
+ *               invalidTrip:
+ *                 value:
+ *                   code: invalid_trip_state
+ *                   message: Trip cannot accept new bookings
+ */
 router.post(
   '/booking-requests/:bookingId/accept',
   authenticate,
@@ -47,6 +228,86 @@ router.post(
   requireCsrf,
   validateRequest(bookingIdParamSchema, 'params'),
   driverController.acceptBookingRequest
+);
+
+/**
+ * @route   POST /drivers/booking-requests/:bookingId/decline
+ * @desc    Decline a pending booking request (idempotent)
+ * @access  Private (Driver only)
+ */
+/**
+ * @openapi
+ * /drivers/booking-requests/{bookingId}/decline:
+ *   post:
+ *     tags:
+ *       - Trip Offers
+ *     summary: Decline a booking request (Driver)
+ *     description: |
+ *       Declines a pending booking request. Operation is idempotent: already declined returns 200.
+ *       Requires driver to own the trip. Protected by CSRF (cookie + header) and JWT cookie.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *     responses:
+ *       200:
+ *         description: Booking declined (or already declined)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                 tripId: { type: string, example: "66a1b2c3d4e5f6a7b8c9d0e1" }
+ *                 passengerId: { type: string, example: "665e2af1b2c3d4e5f6a7b8c9" }
+ *                 status: { type: string, example: declined }
+ *                 decidedAt: { type: string, format: date-time, example: "2025-10-23T05:00:00.000Z" }
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Trip not owned by driver
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: forbidden_owner }
+ *                 message: { type: string, example: Trip does not belong to the driver }
+ *       404:
+ *         description: Booking or trip not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: booking_not_found }
+ *                 message: { type: string, example: Booking request not found }
+ *       409:
+ *         description: Conflict - invalid state (e.g., already accepted)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: invalid_state }
+ *                 message: { type: string, example: Booking request cannot be declined in its current state }
+ */
+router.post(
+  '/booking-requests/:bookingId/decline',
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(bookingIdParamSchema, 'params'),
+  driverController.declineBookingRequest
 );
 
 module.exports = router;
