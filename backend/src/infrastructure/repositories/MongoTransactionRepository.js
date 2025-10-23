@@ -106,12 +106,14 @@ class MongoTransactionRepository extends TransactionRepository {
   }
 
   /**
-   * Find all transactions for a passenger
+   * Find transactions by passenger ID
+   * Supports pagination and status filtering
    * 
    * @param {string} passengerId - Passenger ID
    * @param {Object} [options] - Query options
    * @param {number} [options.page=1] - Page number
    * @param {number} [options.pageSize=10] - Page size
+   * @param {string|string[]} [options.status] - Status filter (single or array)
    * @returns {Promise<{items: Transaction[], total: number}>} Paginated transactions
    */
   async findByPassengerId(passengerId, options = {}) {
@@ -119,22 +121,32 @@ class MongoTransactionRepository extends TransactionRepository {
     const pageSize = Math.min(50, Math.max(1, options.pageSize || 10));
     const skip = (page - 1) * pageSize;
 
+    // Build query
+    const query = { passengerId };
+    
+    // Add status filter if provided
+    if (options.status) {
+      if (Array.isArray(options.status)) {
+        query.status = { $in: options.status };
+      } else {
+        query.status = options.status;
+      }
+    }
+
     const [models, total] = await Promise.all([
       TransactionModel
-        .find({ passengerId })
+        .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(pageSize),
-      TransactionModel.countDocuments({ passengerId })
+      TransactionModel.countDocuments(query)
     ]);
 
     return {
       items: models.map(model => model.toEntity()),
       total
     };
-  }
-
-  /**
+  }  /**
    * Update transaction status
    * Used by webhook handler to update transaction based on provider events
    * 

@@ -13,7 +13,7 @@ const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
 const validateRequest = require('../middlewares/validateRequest');
-const { createPaymentIntentSchema } = require('../validation/paymentSchemas');
+const { createPaymentIntentSchema, getTransactionsQuerySchema } = require('../validation/paymentSchemas');
 
 const paymentController = new PaymentController();
 
@@ -220,14 +220,191 @@ router.get(
 );
 
 /**
- * @route   GET /passengers/payments/transactions
- * @desc    Get all transactions for authenticated passenger
+ * @route   GET /passengers/transactions
+ * @desc    Get all transactions for authenticated passenger (US-4.1.4)
  * @access  Private (Passenger only)
  */
+/**
+ * @openapi
+ * /passengers/transactions:
+ *   get:
+ *     tags:
+ *       - Payments
+ *     summary: Get my transactions (Passenger)
+ *     description: |
+ *       List all payment transactions for the authenticated passenger.
+ *       
+ *       **Features**:
+ *       - Pagination support (page, pageSize)
+ *       - Status filtering (single or multiple)
+ *       - Sorted by createdAt descending (newest first)
+ *       - Hides sensitive fields (no provider secrets)
+ *       
+ *       **Use Cases**:
+ *       - View payment history
+ *       - Generate receipts
+ *       - Support tickets
+ *       - Filter by payment status
+ *       
+ *       **Sensitive Fields (Hidden)**:
+ *       - providerClientSecret
+ *       - Internal provider data
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           oneOf:
+ *             - type: string
+ *               enum: [requires_payment_method, processing, succeeded, failed, canceled, refunded]
+ *             - type: array
+ *               items:
+ *                 type: string
+ *                 enum: [requires_payment_method, processing, succeeded, failed, canceled, refunded]
+ *         description: Filter by transaction status (single or multiple)
+ *         example: "succeeded"
+ *         examples:
+ *           single:
+ *             value: "succeeded"
+ *             summary: Single status filter
+ *           multiple:
+ *             value: ["succeeded", "processing"]
+ *             summary: Multiple status filters
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number
+ *         example: 1
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Items per page
+ *         example: 10
+ *     responses:
+ *       200:
+ *         description: Transactions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "66t1a2b3c4d5e6f7a8b9c0d1"
+ *                       bookingId:
+ *                         type: string
+ *                         example: "66b1c2d3e4f5a6b7c8d9e0f1"
+ *                       tripId:
+ *                         type: string
+ *                         example: "66a1b2c3d4e5f6a7b8c9d0e1"
+ *                       amount:
+ *                         type: integer
+ *                         description: Amount in smallest currency unit
+ *                         example: 6000
+ *                       currency:
+ *                         type: string
+ *                         example: "COP"
+ *                       status:
+ *                         type: string
+ *                         enum: [requires_payment_method, processing, succeeded, failed, canceled, refunded]
+ *                         example: "succeeded"
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-10-10T13:00:00.000Z"
+ *                       processedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2025-10-10T13:01:00.000Z"
+ *                 page:
+ *                   type: integer
+ *                   example: 1
+ *                 pageSize:
+ *                   type: integer
+ *                   example: 10
+ *                 total:
+ *                   type: integer
+ *                   description: Total number of transactions
+ *                   example: 1
+ *                 totalPages:
+ *                   type: integer
+ *                   description: Total number of pages
+ *                   example: 1
+ *             examples:
+ *               with_transactions:
+ *                 value:
+ *                   items:
+ *                     - id: "66t1a2b3c4d5e6f7a8b9c0d1"
+ *                       bookingId: "66b1c2d3e4f5a6b7c8d9e0f1"
+ *                       tripId: "66a1b2c3d4e5f6a7b8c9d0e1"
+ *                       amount: 6000
+ *                       currency: "COP"
+ *                       status: "succeeded"
+ *                       createdAt: "2025-10-10T13:00:00.000Z"
+ *                       processedAt: "2025-10-10T13:01:00.000Z"
+ *                   page: 1
+ *                   pageSize: 10
+ *                   total: 1
+ *                   totalPages: 1
+ *               empty:
+ *                 value:
+ *                   items: []
+ *                   page: 1
+ *                   pageSize: 10
+ *                   total: 0
+ *                   totalPages: 0
+ *       400:
+ *         description: Invalid query parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorValidation'
+ *             examples:
+ *               invalid_status:
+ *                 value:
+ *                   code: "invalid_schema"
+ *                   message: "Validation failed"
+ *                   details:
+ *                     - field: "status"
+ *                       issue: "status must be one of: requires_payment_method, processing, succeeded, failed, canceled, refunded"
+ *               invalid_page:
+ *                 value:
+ *                   code: "invalid_schema"
+ *                   message: "Validation failed"
+ *                   details:
+ *                     - field: "page"
+ *                       issue: "page must be at least 1"
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorUnauthorized'
+ *       403:
+ *         description: Forbidden (not passenger role)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorForbidden'
+ */
 router.get(
-  '/payments/transactions',
+  '/transactions',
   authenticate,
   requireRole('passenger'),
+  validateRequest(getTransactionsQuerySchema, 'query'),
   paymentController.getMyTransactions.bind(paymentController)
 );
 

@@ -149,9 +149,14 @@ class PaymentController {
   }
 
   /**
-   * Get transactions for authenticated passenger
+   * Get transactions for authenticated passenger (US-4.1.4)
    * 
-   * GET /passengers/payments/transactions
+   * GET /passengers/transactions
+   * 
+   * Query parameters:
+   * - status: Transaction status filter (single or array)
+   * - page: Page number (default: 1)
+   * - pageSize: Items per page (default: 10, max: 100)
    * 
    * @param {Request} req - Express request
    * @param {Response} res - Express response
@@ -162,29 +167,58 @@ class PaymentController {
 
     try {
       const passengerId = req.user.id;
-      const page = parseInt(req.query.page) || 1;
-      const pageSize = parseInt(req.query.pageSize) || 10;
+      const { status, page, pageSize } = req.query;
+
+      req.log.info(
+        { correlationId, passengerId, status, page, pageSize },
+        'Fetching passenger transactions'
+      );
+
+      // Build options object
+      const options = {
+        page: parseInt(page) || 1,
+        pageSize: parseInt(pageSize) || 10
+      };
+
+      // Add status filter if provided
+      if (status) {
+        options.status = status;
+      }
 
       const result = await this.paymentService.getTransactionsByPassengerId(
         passengerId,
-        { page, pageSize }
+        options
       );
 
       const dtos = result.items.map(t => TransactionResponseDto.fromEntity(t));
 
-      return res.json({
+      const response = {
         items: dtos,
-        page,
-        pageSize,
+        page: options.page,
+        pageSize: options.pageSize,
         total: result.total,
-        totalPages: Math.ceil(result.total / pageSize)
-      });
+        totalPages: Math.ceil(result.total / options.pageSize)
+      };
+
+      req.log.info(
+        {
+          correlationId,
+          passengerId,
+          itemsReturned: dtos.length,
+          total: result.total,
+          page: options.page
+        },
+        'Transactions retrieved successfully'
+      );
+
+      return res.json(response);
     } catch (error) {
       req.log.error(
         {
           correlationId,
           error: error.message,
-          code: error.code
+          code: error.code,
+          stack: error.stack
         },
         'Failed to get transactions'
       );
