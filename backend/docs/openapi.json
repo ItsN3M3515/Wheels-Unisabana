@@ -31,6 +31,18 @@
     {
       "name": "Vehicles",
       "description": "Gestión de vehículos (drivers)"
+    },
+    {
+      "name": "Authentication",
+      "description": "Autenticación y sesiones"
+    },
+    {
+      "name": "Trip Offers",
+      "description": "Gestión de ofertas de viajes (drivers)"
+    },
+    {
+      "name": "Passenger Trips",
+      "description": "Búsqueda y reserva de viajes (passengers)"
     }
   ],
   "components": {
@@ -236,6 +248,109 @@
           }
         },
         "description": "At least one field required"
+      },
+      "TripOfferResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+          },
+          "driverId": {
+            "type": "string",
+            "example": "665e2af1b2c3d4e5f6a7b8c9"
+          },
+          "vehicleId": {
+            "type": "string",
+            "example": "6680a1b2c3d4e5f6a7b8c9d0"
+          },
+          "origin": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "example": "Campus Norte"
+              },
+              "geo": {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "example": 4.703
+                  },
+                  "lng": {
+                    "type": "number",
+                    "example": -74.041
+                  }
+                }
+              }
+            }
+          },
+          "destination": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "example": "Campus Sur"
+              },
+              "geo": {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "example": 4.627
+                  },
+                  "lng": {
+                    "type": "number",
+                    "example": -74.064
+                  }
+                }
+              }
+            }
+          },
+          "departureAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-01T07:30:00.000Z"
+          },
+          "estimatedArrivalAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-11-01T08:10:00.000Z"
+          },
+          "pricePerSeat": {
+            "type": "number",
+            "example": 6000
+          },
+          "totalSeats": {
+            "type": "integer",
+            "example": 3
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "canceled",
+              "completed"
+            ],
+            "example": "published"
+          },
+          "notes": {
+            "type": "string",
+            "example": "Two backpacks max."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-10-22T10:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2025-10-22T10:00:00.000Z"
+          }
+        }
       }
     }
   },
@@ -997,6 +1112,2001 @@
                       "correlationId": "123e4567-e89b-12d3-a456-426614174000"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/passengers/trips/search": {
+      "get": {
+        "tags": [
+          "Passenger Trips"
+        ],
+        "summary": "Search published trips (Passenger only)",
+        "description": "Search for available published trips with future departure.\n\n**Authorization**: Requires valid JWT cookie (any authenticated user, but intended for passengers).\n\n**Filters**:\n- `qOrigin`: Text search in origin (case-insensitive, partial match)\n- `qDestination`: Text search in destination (case-insensitive, partial match)\n- `fromDate`: Minimum departure date (ISO 8601)\n- `toDate`: Maximum departure date (ISO 8601)\n- `page`: Page number (default: 1, min: 1)\n- `pageSize`: Results per page (default: 10, min: 1, max: 50)\n\n**Business Rules**:\n- Only returns trips with `status='published'`\n- Only returns trips with `departureAt > now` (future trips)\n- Results sorted by `departureAt` ascending (soonest first)\n\n**Security**:\n- Text inputs are sanitized (regex special chars escaped)\n- No driver PII exposed (only public trip fields)\n\n**Performance**:\n- Indexed queries on status and departureAt\n- Pagination enforced (max 50 results per page)\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "qOrigin",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "description": "Text search in origin (case-insensitive)",
+            "example": "Campus"
+          },
+          {
+            "in": "query",
+            "name": "qDestination",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "description": "Text search in destination (case-insensitive)",
+            "example": "Centro"
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Minimum departure date (ISO 8601)",
+            "example": "2025-11-01T00:00:00.000Z"
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Maximum departure date (ISO 8601)",
+            "example": "2025-11-30T23:59:59.999Z"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number",
+            "example": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            },
+            "description": "Results per page",
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results with pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TripOfferResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "example": 10
+                    },
+                    "total": {
+                      "type": "integer",
+                      "example": 25
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "example": 3
+                    }
+                  }
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Search results with trips",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                          "driverId": "665e2af1b2c3d4e5f6a7b8c9",
+                          "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                          "origin": {
+                            "text": "Campus Norte",
+                            "geo": {
+                              "lat": 4.703,
+                              "lng": -74.041
+                            }
+                          },
+                          "destination": {
+                            "text": "Centro",
+                            "geo": {
+                              "lat": 4.652,
+                              "lng": -74.093
+                            }
+                          },
+                          "departureAt": "2025-11-01T07:30:00.000Z",
+                          "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                          "pricePerSeat": 6000,
+                          "totalSeats": 3,
+                          "status": "published",
+                          "notes": "Two backpacks max.",
+                          "createdAt": "2025-10-22T10:00:00.000Z",
+                          "updatedAt": "2025-10-22T10:00:00.000Z"
+                        }
+                      ],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 1,
+                      "totalPages": 1
+                    }
+                  },
+                  "empty": {
+                    "summary": "No trips found",
+                    "value": {
+                      "items": [],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 0,
+                      "totalPages": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "invalid_page": {
+                    "summary": "Invalid page number",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        "page must be at least 1"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_date_range": {
+                    "summary": "toDate before fromDate",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        "toDate must be after fromDate"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "exceeds_pageSize": {
+                    "summary": "pageSize exceeds maximum",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        "pageSize must not exceed 50"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/passengers/bookings": {
+      "post": {
+        "tags": [
+          "Passenger Trips"
+        ],
+        "summary": "Create a booking request (Passenger only)",
+        "description": "Submit a booking request for a published trip with future departure.\n\n**Authorization**: Requires role='passenger' and valid JWT cookie.\n**CSRF Protection**: Required for state-changing operations.\n\n**Business Rules**:\n- Trip must exist and have `status='published'`\n- Trip `departureAt` must be in the future\n- Passenger cannot have another active (pending) request for the same trip\n- Note is optional and must be ≤ 300 characters\n- Request starts with `status='pending'`\n\n**Future**: Accept/decline flow and capacity enforcement will be added in later stories.\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tripId"
+                ],
+                "properties": {
+                  "tripId": {
+                    "type": "string",
+                    "pattern": "^[a-f\\d]{24}$",
+                    "description": "Trip offer ID (MongoDB ObjectId)",
+                    "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300,
+                    "description": "Optional note for the driver",
+                    "example": "I have a small bag."
+                  },
+                  "seats": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1,
+                    "description": "Number of seats requested",
+                    "example": 1
+                  }
+                }
+              },
+              "examples": {
+                "with_note": {
+                  "summary": "Request with note",
+                  "value": {
+                    "tripId": "66a1b2c3d4e5f6a7b8c9d0e1",
+                    "note": "I have a small bag."
+                  }
+                },
+                "minimal": {
+                  "summary": "Minimal request",
+                  "value": {
+                    "tripId": "66a1b2c3d4e5f6a7b8c9d0e1"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Booking request created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Booking request ID",
+                      "example": "66b1c2d3e4f5a6b7c8d9e0f1"
+                    },
+                    "tripId": {
+                      "type": "string",
+                      "description": "Trip offer ID",
+                      "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+                    },
+                    "passengerId": {
+                      "type": "string",
+                      "description": "Passenger user ID",
+                      "example": "665e2af1b2c3d4e5f6a7b8c9"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ],
+                      "description": "Request status (always 'pending' on creation)",
+                      "example": "pending"
+                    },
+                    "note": {
+                      "type": "string",
+                      "description": "Optional note from passenger",
+                      "example": "I have a small bag."
+                    },
+                    "seats": {
+                      "type": "integer",
+                      "description": "Number of seats requested",
+                      "example": 1
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "Request creation timestamp",
+                      "example": "2025-10-23T01:15:00.000Z"
+                    }
+                  }
+                },
+                "example": {
+                  "id": "66b1c2d3e4f5a6b7c8d9e0f1",
+                  "tripId": "66a1b2c3d4e5f6a7b8c9d0e1",
+                  "passengerId": "665e2af1b2c3d4e5f6a7b8c9",
+                  "status": "pending",
+                  "note": "I have a small bag.",
+                  "seats": 1,
+                  "createdAt": "2025-10-23T01:15:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "missing_tripId": {
+                    "summary": "Missing tripId",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "tripId",
+                          "issue": "tripId is required"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_tripId": {
+                    "summary": "Invalid tripId format",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "tripId",
+                          "issue": "tripId must be a valid MongoDB ObjectId"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "note_too_long": {
+                    "summary": "Note exceeds 300 characters",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "note",
+                          "issue": "note must not exceed 300 characters"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not a passenger or CSRF token missing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "examples": {
+                  "forbidden_role": {
+                    "summary": "Only passengers can create booking requests",
+                    "value": {
+                      "code": "forbidden_role",
+                      "message": "Only passengers can create booking requests",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "csrf_missing": {
+                    "summary": "CSRF token missing or invalid",
+                    "value": {
+                      "code": "csrf_mismatch",
+                      "message": "CSRF token missing or invalid",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "trip_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip offer not found"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (duplicate request or invalid trip state)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "duplicate_request": {
+                    "summary": "Passenger already has a pending request for this trip",
+                    "value": {
+                      "code": "duplicate_request",
+                      "message": "You already have a pending request for this trip",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_trip_state": {
+                    "summary": "Trip is not published or already departed",
+                    "value": {
+                      "code": "invalid_trip_state",
+                      "message": "Trip is not published or already departed",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Passenger Trips"
+        ],
+        "summary": "List my booking requests (Passenger only)",
+        "description": "List the caller's booking requests with optional filters and pagination.\n\n**Authorization**: Requires role='passenger' and valid JWT cookie.\n\n**Filters**:\n- `status`: Filter by status (single or multiple)\n- `fromDate`: Minimum createdAt date (ISO 8601)\n- `toDate`: Maximum createdAt date (ISO 8601)\n- `page`: Page number (default: 1, min: 1)\n- `pageSize`: Results per page (default: 10, min: 1, max: 50)\n\n**Business Rules**:\n- Returns only the caller's booking requests (owner-only)\n- Results sorted by `createdAt` desc (most recent first)\n- Pagination enforced (max 50 results per page)\n\n**Security**:\n- No access to other passengers' requests\n- Full DTO with trip details not populated (use GET /trips/:id separately)\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "canceled_by_passenger",
+                    "accepted",
+                    "declined",
+                    "expired"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "pending",
+                      "canceled_by_passenger",
+                      "accepted",
+                      "declined",
+                      "expired"
+                    ]
+                  }
+                }
+              ]
+            },
+            "description": "Filter by status (single or array)",
+            "example": "pending"
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Minimum createdAt date (ISO 8601)",
+            "example": "2025-10-01T00:00:00.000Z"
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Maximum createdAt date (ISO 8601)",
+            "example": "2025-10-31T23:59:59.999Z"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number",
+            "example": 1
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            },
+            "description": "Results per page",
+            "example": 10
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of booking requests with pagination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "tripId": {
+                            "type": "string"
+                          },
+                          "passengerId": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "canceled_by_passenger",
+                              "accepted",
+                              "declined",
+                              "expired"
+                            ]
+                          },
+                          "note": {
+                            "type": "string"
+                          },
+                          "seats": {
+                            "type": "integer"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "example": 10
+                    },
+                    "total": {
+                      "type": "integer",
+                      "example": 7
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "example": 1
+                    }
+                  }
+                },
+                "examples": {
+                  "with_results": {
+                    "summary": "List with results",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "66b1c2d3e4f5a6b7c8d9e0f1",
+                          "tripId": "66a1b2c3d4e5f6a7b8c9d0e1",
+                          "passengerId": "665e2af1b2c3d4e5f6a7b8c9",
+                          "status": "pending",
+                          "note": "I have a small bag.",
+                          "seats": 1,
+                          "createdAt": "2025-10-23T01:15:00.000Z"
+                        },
+                        {
+                          "id": "66b1c2d3e4f5a6b7c8d9e0f2",
+                          "tripId": "66a1b2c3d4e5f6a7b8c9d0e2",
+                          "passengerId": "665e2af1b2c3d4e5f6a7b8c9",
+                          "status": "accepted",
+                          "note": "",
+                          "seats": 1,
+                          "createdAt": "2025-10-22T10:30:00.000Z"
+                        }
+                      ],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 2,
+                      "totalPages": 1
+                    }
+                  },
+                  "empty": {
+                    "summary": "Empty list",
+                    "value": {
+                      "items": [],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 0,
+                      "totalPages": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "invalid_page": {
+                    "summary": "Invalid page number",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Invalid query parameters",
+                      "details": [
+                        "page must be at least 1"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_status": {
+                    "summary": "Invalid status value",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Invalid query parameters",
+                      "details": [
+                        "status must be one of: pending, canceled_by_passenger, accepted, declined, expired"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "exceeds_pageSize": {
+                    "summary": "pageSize exceeds maximum",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Invalid query parameters",
+                      "details": [
+                        "pageSize must not exceed 50"
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not a passenger)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "example": {
+                  "code": "forbidden_role",
+                  "message": "Only passengers can list booking requests",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/passengers/bookings/{bookingId}": {
+      "delete": {
+        "tags": [
+          "Passenger Trips"
+        ],
+        "summary": "Cancel my booking request (Passenger only, owner-only)",
+        "description": "Cancel a booking request owned by the caller. Only pending requests can be canceled.\n\n**Authorization**: Requires role='passenger', valid JWT cookie, and ownership.\n**CSRF Protection**: Required for state-changing operations.\n\n**Business Rules**:\n- Only the request owner (passenger) can cancel\n- Only `pending` status can be canceled → `canceled_by_passenger`\n- **Idempotent**: If already `canceled_by_passenger`, returns 200 with status unchanged\n- Future statuses (accepted, declined, expired) cannot be canceled → 409\n\n**Status Transition**:\n- `pending` → `canceled_by_passenger`: OK (200)\n- `canceled_by_passenger` → `canceled_by_passenger`: OK (200, idempotent)\n- `accepted`/`declined`/`expired` → ✗ 409 invalid_state\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "bookingId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            },
+            "description": "Booking request ID (MongoDB ObjectId)",
+            "example": "66b1c2d3e4f5a6b7c8d9e0f1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Booking request canceled successfully (or already canceled - idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "tripId": {
+                      "type": "string"
+                    },
+                    "passengerId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "canceled_by_passenger"
+                      ]
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "seats": {
+                      "type": "integer"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                },
+                "examples": {
+                  "canceled": {
+                    "summary": "Request successfully canceled",
+                    "value": {
+                      "id": "66b1c2d3e4f5a6b7c8d9e0f1",
+                      "tripId": "66a1b2c3d4e5f6a7b8c9d0e1",
+                      "passengerId": "665e2af1b2c3d4e5f6a7b8c9",
+                      "status": "canceled_by_passenger",
+                      "note": "I have a small bag.",
+                      "seats": 1,
+                      "createdAt": "2025-10-23T01:15:00.000Z"
+                    }
+                  },
+                  "already_canceled": {
+                    "summary": "Already canceled (idempotent)",
+                    "value": {
+                      "id": "66b1c2d3e4f5a6b7c8d9e0f1",
+                      "status": "canceled_by_passenger"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid bookingId format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "example": {
+                  "code": "invalid_schema",
+                  "message": "Validation failed",
+                  "details": [
+                    {
+                      "field": "bookingId",
+                      "issue": "bookingId must be a valid MongoDB ObjectId"
+                    }
+                  ],
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not owner, not a passenger, or CSRF token missing)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "examples": {
+                  "not_owner": {
+                    "summary": "Booking request does not belong to the caller",
+                    "value": {
+                      "code": "forbidden_owner",
+                      "message": "You do not own this booking request",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "forbidden_role": {
+                    "summary": "Only passengers can cancel booking requests",
+                    "value": {
+                      "code": "forbidden_role",
+                      "message": "Only passengers can cancel booking requests",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "csrf_missing": {
+                    "summary": "CSRF token missing or invalid",
+                    "value": {
+                      "code": "csrf_mismatch",
+                      "message": "CSRF token missing or invalid",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Booking request not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Booking request not found"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (cannot cancel in current state)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "invalid_state"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "invalid_state",
+                  "message": "Cannot cancel booking with status: accepted. Only pending bookings can be canceled.",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers/trips": {
+      "post": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "Create a new trip offer (Driver only)",
+        "description": "Creates a new trip offer for the authenticated driver.\n\n**Authorization**: Requires role='driver' and valid JWT cookie.\n\n**Business Rules**:\n- vehicleId must be owned by the driver\n- departureAt must be in the future (for published trips)\n- estimatedArrivalAt must be after departureAt\n- totalSeats must be ≤ vehicle capacity\n- Optional: rejects overlapping published trips (same driver, same time window)\n\n**Status**:\n- `draft`: Trip is not visible to passengers, can be published later\n- `published`: Trip is visible to passengers and can receive bookings\n\n**Structured Logging**:\n- All requests logged with correlation ID\n- PII (origin/destination text) redacted in logs\n- Only status codes and trip IDs logged\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "vehicleId",
+                  "origin",
+                  "destination",
+                  "departureAt",
+                  "estimatedArrivalAt",
+                  "pricePerSeat",
+                  "totalSeats"
+                ],
+                "properties": {
+                  "vehicleId": {
+                    "type": "string",
+                    "pattern": "^[a-f\\d]{24}$",
+                    "example": "6680a1b2c3d4e5f6a7b8c9d0"
+                  },
+                  "origin": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "geo"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 200,
+                        "example": "Campus Norte - Universidad de La Sabana"
+                      },
+                      "geo": {
+                        "type": "object",
+                        "required": [
+                          "lat",
+                          "lng"
+                        ],
+                        "properties": {
+                          "lat": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90,
+                            "example": 4.703
+                          },
+                          "lng": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180,
+                            "example": -74.041
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "destination": {
+                    "type": "object",
+                    "required": [
+                      "text",
+                      "geo"
+                    ],
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 200,
+                        "example": "Campus Sur - Universidad de La Sabana"
+                      },
+                      "geo": {
+                        "type": "object",
+                        "required": [
+                          "lat",
+                          "lng"
+                        ],
+                        "properties": {
+                          "lat": {
+                            "type": "number",
+                            "minimum": -90,
+                            "maximum": 90,
+                            "example": 4.627
+                          },
+                          "lng": {
+                            "type": "number",
+                            "minimum": -180,
+                            "maximum": 180,
+                            "example": -74.064
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "departureAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 datetime (must be in the future for published trips)",
+                    "example": "2025-11-01T07:30:00.000Z"
+                  },
+                  "estimatedArrivalAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "ISO 8601 datetime (must be after departureAt)",
+                    "example": "2025-11-01T08:10:00.000Z"
+                  },
+                  "pricePerSeat": {
+                    "type": "number",
+                    "minimum": 0,
+                    "multipleOf": 0.01,
+                    "description": "Price per seat (2 decimal places)",
+                    "example": 6000
+                  },
+                  "totalSeats": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Number of available seats (must be ≤ vehicle capacity)",
+                    "example": 3
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "published"
+                    ],
+                    "default": "published",
+                    "description": "Trip visibility status",
+                    "example": "published"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Optional notes for passengers",
+                    "example": "Two backpacks max. No pets allowed."
+                  }
+                }
+              },
+              "examples": {
+                "published": {
+                  "summary": "Published trip (visible to passengers)",
+                  "value": {
+                    "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                    "origin": {
+                      "text": "Campus Norte - Universidad de La Sabana",
+                      "geo": {
+                        "lat": 4.703,
+                        "lng": -74.041
+                      }
+                    },
+                    "destination": {
+                      "text": "Campus Sur - Universidad de La Sabana",
+                      "geo": {
+                        "lat": 4.627,
+                        "lng": -74.064
+                      }
+                    },
+                    "departureAt": "2025-11-01T07:30:00.000Z",
+                    "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                    "pricePerSeat": 6000,
+                    "totalSeats": 3,
+                    "status": "published",
+                    "notes": "Two backpacks max."
+                  }
+                },
+                "draft": {
+                  "summary": "Draft trip (not visible, can publish later)",
+                  "value": {
+                    "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                    "origin": {
+                      "text": "Chía Centro",
+                      "geo": {
+                        "lat": 4.858,
+                        "lng": -74.059
+                      }
+                    },
+                    "destination": {
+                      "text": "Bogotá Centro",
+                      "geo": {
+                        "lat": 4.598,
+                        "lng": -74.076
+                      }
+                    },
+                    "departureAt": "2025-11-05T14:00:00.000Z",
+                    "estimatedArrivalAt": "2025-11-05T15:30:00.000Z",
+                    "pricePerSeat": 8000,
+                    "totalSeats": 4,
+                    "status": "draft",
+                    "notes": ""
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Trip offer created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripOfferResponse"
+                },
+                "example": {
+                  "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                  "driverId": "665e2af1b2c3d4e5f6a7b8c9",
+                  "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                  "origin": {
+                    "text": "Campus Norte - Universidad de La Sabana",
+                    "geo": {
+                      "lat": 4.703,
+                      "lng": -74.041
+                    }
+                  },
+                  "destination": {
+                    "text": "Campus Sur - Universidad de La Sabana",
+                    "geo": {
+                      "lat": 4.627,
+                      "lng": -74.064
+                    }
+                  },
+                  "departureAt": "2025-11-01T07:30:00.000Z",
+                  "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                  "pricePerSeat": 6000,
+                  "totalSeats": 3,
+                  "status": "published",
+                  "notes": "Two backpacks max.",
+                  "createdAt": "2025-10-22T10:00:00.000Z",
+                  "updatedAt": "2025-10-22T10:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (validation errors, time/capacity violations)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "invalid_schema": {
+                    "summary": "Validation error",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "departureAt",
+                          "issue": "departureAt must be a valid ISO 8601 date"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "departure_in_past": {
+                    "summary": "Departure time in the past",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "departureAt must be in the future",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "exceeds_capacity": {
+                    "summary": "Total seats exceeds vehicle capacity",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "totalSeats (5) exceeds vehicle capacity (4)",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not a driver or vehicle ownership violation)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "examples": {
+                  "not_driver": {
+                    "summary": "User is not a driver",
+                    "value": {
+                      "code": "forbidden",
+                      "message": "Only drivers can create trip offers",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "forbidden_owner": {
+                    "summary": "Vehicle does not belong to driver",
+                    "value": {
+                      "code": "forbidden_owner",
+                      "message": "Vehicle does not belong to the driver",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (overlapping trip)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "overlapping_trip"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "You have another published trip during this time window"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "overlapping_trip",
+                  "message": "You have another published trip during this time window",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "List my trip offers (Driver only)",
+        "description": "Returns paginated list of trip offers for the authenticated driver.\nSupports filtering by status, date range, and pagination.\n\n**Authorization**: Requires role='driver' and valid JWT cookie.\n\n**Filters**:\n- `status`: Filter by one or multiple statuses (draft, published, canceled, completed)\n- `fromDate`: Filter trips departing on or after this date\n- `toDate`: Filter trips departing on or before this date\n\n**Pagination**:\n- `page`: Page number (1-based, default: 1)\n- `pageSize`: Items per page (1-50, default: 10)\n\n**Sorting**: Results sorted by `departureAt` descending (most recent first)\n\n**Security**: Only returns trips owned by the authenticated driver\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "published",
+                    "canceled",
+                    "completed"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "published",
+                      "canceled",
+                      "completed"
+                    ]
+                  }
+                }
+              ]
+            },
+            "description": "Filter by trip status (can be multiple)",
+            "example": "published"
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter trips departing on or after this date",
+            "example": "2025-10-01T00:00:00.000Z"
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Filter trips departing on or before this date",
+            "example": "2025-12-31T23:59:59.999Z"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number (1-based)"
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 10
+            },
+            "description": "Number of items per page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of trip offers with pagination metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TripOfferResponse"
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "pageSize": {
+                      "type": "integer",
+                      "example": 10
+                    },
+                    "total": {
+                      "type": "integer",
+                      "example": 14
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "example": 2
+                    }
+                  }
+                },
+                "examples": {
+                  "with_items": {
+                    "summary": "Response with items",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                          "driverId": "665e2af1b2c3d4e5f6a7b8c9",
+                          "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                          "origin": {
+                            "text": "Campus Norte",
+                            "geo": {
+                              "lat": 4.703,
+                              "lng": -74.041
+                            }
+                          },
+                          "destination": {
+                            "text": "Campus Sur",
+                            "geo": {
+                              "lat": 4.627,
+                              "lng": -74.064
+                            }
+                          },
+                          "departureAt": "2025-11-01T07:30:00.000Z",
+                          "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                          "pricePerSeat": 6000,
+                          "totalSeats": 3,
+                          "status": "published",
+                          "notes": "Two backpacks max.",
+                          "createdAt": "2025-10-22T10:00:00.000Z",
+                          "updatedAt": "2025-10-22T10:00:00.000Z"
+                        }
+                      ],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 14,
+                      "totalPages": 2
+                    }
+                  },
+                  "empty": {
+                    "summary": "No trips found",
+                    "value": {
+                      "items": [],
+                      "page": 1,
+                      "pageSize": 10,
+                      "total": 0,
+                      "totalPages": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "invalid_status": {
+                    "summary": "Invalid status value",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "status",
+                          "issue": "status must be one of: draft, published, canceled, completed"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "invalid_date": {
+                    "summary": "Invalid date format",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "fromDate",
+                          "issue": "fromDate must be a valid ISO 8601 date"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "toDate_before_fromDate": {
+                    "summary": "toDate before fromDate",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "toDate",
+                          "issue": "toDate must be after fromDate"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not a driver)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drivers/trips/{id}": {
+      "patch": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "Update a trip offer (Driver only, owner-only)",
+        "description": "Partial update of a trip offer. Only the owner driver can update their trips.\n\n**Authorization**: Requires role='driver', valid JWT cookie, and ownership.\n**CSRF Protection**: Required for state-changing operations.\n\n**Allowed Fields**:\n- `pricePerSeat`: Update price\n- `totalSeats`: Update capacity (must be ≥ 1 and ≤ vehicle capacity)\n- `notes`: Update trip notes\n- `status`: Transition status (draft ↔ published, published → canceled)\n\n**Business Rules**:\n- Only draft trips can have times edited (if enabled in config)\n- Cannot edit canceled or completed trips\n- Status transitions must be legal\n- totalSeats cannot be less than booked seats (future validation)\n- All updates re-validate against vehicle capacity\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            },
+            "description": "Trip offer ID (MongoDB ObjectId)",
+            "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "properties": {
+                  "pricePerSeat": {
+                    "type": "number",
+                    "minimum": 0,
+                    "multipleOf": 0.01,
+                    "description": "Price per seat",
+                    "example": 6500
+                  },
+                  "totalSeats": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Total seats (must be ≤ vehicle capacity)",
+                    "example": 4
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "Trip notes",
+                    "example": "Meet at Gate 3. Be punctual."
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft",
+                      "published",
+                      "canceled",
+                      "completed"
+                    ],
+                    "description": "Trip status (legal transitions only)",
+                    "example": "published"
+                  }
+                }
+              },
+              "examples": {
+                "update_price": {
+                  "summary": "Update price and notes",
+                  "value": {
+                    "pricePerSeat": 6500,
+                    "notes": "Meet at Gate 3"
+                  }
+                },
+                "publish_draft": {
+                  "summary": "Publish a draft trip",
+                  "value": {
+                    "status": "published"
+                  }
+                },
+                "update_capacity": {
+                  "summary": "Update total seats",
+                  "value": {
+                    "totalSeats": 4
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trip updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripOfferResponse"
+                },
+                "example": {
+                  "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                  "driverId": "665e2af1b2c3d4e5f6a7b8c9",
+                  "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                  "origin": {
+                    "text": "Campus Norte",
+                    "geo": {
+                      "lat": 4.703,
+                      "lng": -74.041
+                    }
+                  },
+                  "destination": {
+                    "text": "Campus Sur",
+                    "geo": {
+                      "lat": 4.627,
+                      "lng": -74.064
+                    }
+                  },
+                  "departureAt": "2025-11-01T07:30:00.000Z",
+                  "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                  "pricePerSeat": 6500,
+                  "totalSeats": 3,
+                  "status": "published",
+                  "notes": "Meet at Gate 3",
+                  "createdAt": "2025-10-22T10:00:00.000Z",
+                  "updatedAt": "2025-10-22T10:15:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorValidation"
+                },
+                "examples": {
+                  "invalid_price": {
+                    "summary": "Invalid price",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "Validation failed",
+                      "details": [
+                        {
+                          "field": "pricePerSeat",
+                          "issue": "pricePerSeat must be a positive number"
+                        }
+                      ],
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "exceeds_capacity": {
+                    "summary": "Total seats exceeds vehicle capacity",
+                    "value": {
+                      "code": "invalid_schema",
+                      "message": "totalSeats (5) exceeds vehicle capacity (4)",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not owner or not a driver)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "examples": {
+                  "not_owner": {
+                    "summary": "Trip does not belong to the driver",
+                    "value": {
+                      "code": "forbidden_owner",
+                      "message": "Trip does not belong to the driver",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "trip_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip offer not found"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (invalid status transition or editing restriction)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "invalid_transition"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "invalid_transition": {
+                    "summary": "Invalid status transition",
+                    "value": {
+                      "code": "invalid_transition",
+                      "message": "Cannot transition from canceled to published",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "cannot_edit_published_time": {
+                    "summary": "Cannot edit times on published trip",
+                    "value": {
+                      "code": "invalid_transition",
+                      "message": "Cannot edit departureAt for a published trip",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Trip Offers"
+        ],
+        "summary": "Cancel a trip offer (Driver only, owner-only)",
+        "description": "Soft-cancel a trip by changing status to `canceled`. Only the owner driver can cancel their trips.\n\n**Authorization**: Requires role='driver', valid JWT cookie, and ownership.\n**CSRF Protection**: Required for state-changing operations.\n\n**Business Rules**:\n- Can cancel trips with status `published` or `draft`\n- Cannot cancel `completed` trips (409 invalid_transition)\n- **Idempotent**: Repeated cancels return 200 with status=canceled\n\n**Future**: Passenger notifications & refund logic will be added in booking story.\n\n**Status Transition**:\n- `published` → `canceled`: OK\n- `draft` → `canceled`: OK\n- `completed` → `canceled`: 409 invalid_transition\n- `canceled` → `canceled`: 200 (idempotent)\n",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f\\d]{24}$"
+            },
+            "description": "Trip offer ID (MongoDB ObjectId)",
+            "example": "66a1b2c3d4e5f6a7b8c9d0e1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trip canceled successfully (or already canceled - idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripOfferResponse"
+                },
+                "examples": {
+                  "canceled": {
+                    "summary": "Trip successfully canceled",
+                    "value": {
+                      "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                      "driverId": "665e2af1b2c3d4e5f6a7b8c9",
+                      "vehicleId": "6680a1b2c3d4e5f6a7b8c9d0",
+                      "origin": {
+                        "text": "Campus Norte",
+                        "geo": {
+                          "lat": 4.703,
+                          "lng": -74.041
+                        }
+                      },
+                      "destination": {
+                        "text": "Campus Sur",
+                        "geo": {
+                          "lat": 4.627,
+                          "lng": -74.064
+                        }
+                      },
+                      "departureAt": "2025-11-01T07:30:00.000Z",
+                      "estimatedArrivalAt": "2025-11-01T08:10:00.000Z",
+                      "pricePerSeat": 6000,
+                      "totalSeats": 3,
+                      "status": "canceled",
+                      "notes": "Trip canceled by driver",
+                      "createdAt": "2025-10-22T10:00:00.000Z",
+                      "updatedAt": "2025-10-22T11:30:00.000Z"
+                    }
+                  },
+                  "already_canceled": {
+                    "summary": "Already canceled (idempotent)",
+                    "value": {
+                      "id": "66a1b2c3d4e5f6a7b8c9d0e1",
+                      "status": "canceled"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorUnauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (not owner or not a driver)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorForbidden"
+                },
+                "examples": {
+                  "not_owner": {
+                    "summary": "Trip does not belong to the driver",
+                    "value": {
+                      "code": "forbidden_owner",
+                      "message": "Trip does not belong to the driver",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  },
+                  "csrf_missing": {
+                    "summary": "CSRF token missing or invalid",
+                    "value": {
+                      "code": "csrf_mismatch",
+                      "message": "CSRF token missing or invalid",
+                      "correlationId": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trip not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "trip_not_found"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Trip offer not found"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (cannot cancel completed trip)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "example": "invalid_transition"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Completed trips cannot be canceled"
+                    },
+                    "correlationId": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "invalid_transition",
+                  "message": "Completed trips cannot be canceled",
+                  "correlationId": "123e4567-e89b-12d3-a456-426614174000"
                 }
               }
             }
