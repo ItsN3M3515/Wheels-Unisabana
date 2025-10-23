@@ -19,6 +19,59 @@ const bookingRequestService = new BookingRequestService(
 
 class DriverController {
   /**
+   * POST /drivers/booking-requests/:bookingId/accept
+   * 
+   * Accept a pending booking request with atomic seat allocation.
+   * Enforces ownership, trip state, and capacity via Seat Ledger.
+   */
+  async acceptBookingRequest(req, res, next) {
+    try {
+      const { bookingId } = req.params;
+      const driverId = req.user.id;
+
+      console.log(
+        `[DriverController] Accepting booking request | bookingId: ${bookingId} | driverId: ${driverId}`
+      );
+
+      const booking = await bookingRequestService.acceptBookingRequest(
+        bookingId,
+        driverId
+      );
+
+      // Map to integration contract response
+      return res.status(200).json({
+        id: booking.id,
+        tripId: booking.tripId,
+        passengerId: booking.passengerId,
+        status: booking.status,
+        decidedAt: booking.acceptedAt
+      });
+    } catch (err) {
+      // Map domain error codes to expected HTTP status and codes
+      if (err && err.code) {
+        const DomainError = require('../../domain/errors/DomainError');
+        switch (err.code) {
+          case 'forbidden_owner':
+            return next(new DomainError('Trip does not belong to the driver', 'forbidden_owner', 403));
+          case 'capacity_exceeded':
+            return next(new DomainError('No seats remaining for this trip', 'capacity_exceeded', 409));
+          case 'invalid_state':
+            return next(new DomainError('Booking request cannot be accepted in its current state', 'invalid_state', 409));
+          case 'trip_not_published':
+          case 'trip_in_past':
+            return next(new DomainError('Trip cannot accept new bookings', 'invalid_trip_state', 409));
+          case 'booking_not_found':
+            return next(new DomainError('Booking request not found', 'booking_not_found', 404));
+          case 'trip_not_found':
+            return next(new DomainError('Trip offer not found', 'trip_not_found', 404));
+          default:
+            break; // fall through to global handler
+        }
+      }
+      return next(err);
+    }
+  }
+  /**
    * GET /drivers/trips/:tripId/booking-requests
    * 
    * List booking requests for a specific trip owned by the driver.

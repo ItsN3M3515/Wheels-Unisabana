@@ -10,10 +10,13 @@ const router = express.Router();
 
 const driverController = require('../controllers/driverController');
 const authenticate = require('../middlewares/authenticate');
+const { requireRole } = require('../middlewares/authenticate');
+const requireCsrf = require('../middlewares/requireCsrf');
 const validateRequest = require('../middlewares/validateRequest');
 const {
   driverTripBookingRequestsQuerySchema,
-  tripIdParamSchema
+  tripIdParamSchema,
+  bookingIdParamSchema
 } = require('../validation/bookingRequestSchemas');
 
 /**
@@ -27,11 +30,23 @@ const {
 router.get(
   '/trips/:tripId/booking-requests',
   authenticate,
-  validateRequest({
-    params: tripIdParamSchema,
-    query: driverTripBookingRequestsQuerySchema
-  }),
+  validateRequest(tripIdParamSchema, 'params'),
+  validateRequest(driverTripBookingRequestsQuerySchema, 'query'),
   driverController.listTripBookingRequests
+);
+
+/**
+ * @route   POST /drivers/booking-requests/:bookingId/accept
+ * @desc    Accept a pending booking request (atomic seat allocation)
+ * @access  Private (Driver only)
+ */
+router.post(
+  '/booking-requests/:bookingId/accept',
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(bookingIdParamSchema, 'params'),
+  driverController.acceptBookingRequest
 );
 
 module.exports = router;

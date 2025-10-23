@@ -6,13 +6,22 @@
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
+let memoryServer = null; // mongodb-memory-server instance (for tests)
 
 /**
  * Connect to test database
  */
 async function connectTestDB() {
-  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/wheels-unisabana-test';
-  await mongoose.connect(mongoUri);
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/wheels-unisabana-test';
+  try {
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 2000 });
+  } catch (err) {
+    // Fallback to in-memory MongoDB for tests when local/remote is unavailable
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    memoryServer = await MongoMemoryServer.create();
+    const memUri = memoryServer.getUri();
+    await mongoose.connect(memUri);
+  }
 }
 
 /**
@@ -20,6 +29,10 @@ async function connectTestDB() {
  */
 async function disconnectTestDB() {
   await mongoose.connection.close();
+  if (memoryServer) {
+    await memoryServer.stop();
+    memoryServer = null;
+  }
 }
 
 /**
@@ -32,21 +45,7 @@ async function clearDatabase() {
   }
 }
 
-/**
- * Create a test user (driver or passenger)
- */
-async function createTestUser(role = 'driver') {
-  const randomId = Math.floor(300000 + Math.random() * 99999);
-  return {
-    firstName: 'Test',
-    lastName: role === 'driver' ? 'Driver' : 'Passenger',
-    universityId: `${randomId}`,
-    corporateEmail: `test${randomId}@unisabana.edu.co`,
-    phone: '+573001234567',
-    password: 'TestPass123!',
-    role
-  };
-}
+// Note: createTestUser is implemented later to persist users in the DB for integration tests
 
 /**
  * Generate random plate
@@ -148,11 +147,13 @@ function cleanupUploads(subfolder = 'vehicles') {
     const corporateEmail = email || `test${randomId}@unisabana.edu.co`;
 
     const user = await UserModel.create({
-      fullName: `Test ${role === 'driver' ? 'Driver' : 'Passenger'}`,
+      firstName: 'Test',
+      lastName: role === 'driver' ? 'Driver' : 'Passenger',
       corporateEmail,
-      password: '$2b$10$abcdefghijklmnopqrstuv', // Hashed password
-      role,
-      isEmailVerified: true
+      universityId: `U${Math.floor(100000 + Math.random() * 899999)}`,
+      phone: '+573001234567',
+      password: 'hashed-password',
+      role
     });
 
     return {
@@ -166,15 +167,21 @@ function cleanupUploads(subfolder = 'vehicles') {
    * Login user and get JWT token
    */
   async function loginUser(email, password = 'SecurePass123!') {
-    const { generateToken } = require('../../src/utils/jwt');
     const UserModel = require('../../src/infrastructure/database/models/UserModel');
-  
+    const AuthService = require('../../src/domain/services/AuthService');
+
     const user = await UserModel.findOne({ corporateEmail: email });
     if (!user) {
       throw new Error(`User not found: ${email}`);
     }
 
-    return generateToken({ userId: user._id.toString(), role: user.role });
+    const authService = new AuthService();
+    // Sign a JWT matching our middleware expectations
+    return authService.signAccessToken({
+      sub: user._id.toString(),
+      role: user.role,
+      email: user.corporateEmail
+    });
   }
 
   /**
@@ -184,11 +191,10 @@ function cleanupUploads(subfolder = 'vehicles') {
     const VehicleModel = require('../../src/infrastructure/database/models/VehicleModel');
   
     const vehicle = await VehicleModel.create({
-      ownerId,
+      driverId: ownerId,
       brand,
       model,
-      year,
-      color: 'White',
+      // year and color not in schema; ensure only schema fields are set
       plate,
       capacity
     });
@@ -252,11 +258,13 @@ function cleanupUploads(subfolder = 'vehicles') {
     const VehicleModel = require('../../src/infrastructure/database/models/VehicleModel');
     const TripOfferModel = require('../../src/infrastructure/database/models/TripOfferModel');
     const BookingRequestModel = require('../../src/infrastructure/database/models/BookingRequestModel');
+    const SeatLedgerModel = require('../../src/infrastructure/database/models/SeatLedgerModel');
 
     await BookingRequestModel.deleteMany({});
     await TripOfferModel.deleteMany({});
     await VehicleModel.deleteMany({});
     await UserModel.deleteMany({ corporateEmail: /@unisabana\.edu\.co/ });
+    await SeatLedgerModel.deleteMany({});
   }
 
 module.exports = {
