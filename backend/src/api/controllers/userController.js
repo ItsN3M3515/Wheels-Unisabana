@@ -162,6 +162,27 @@ class UserController {
       
       console.log(`[UserController] Role toggled successfully | userId: ${userId}`);
       
+      // Generate NEW JWT token with the NEW role
+      const token = this.authService.signAccessToken({
+        sub: updatedUser.id,
+        role: updatedUser.role,
+        email: updatedUser.corporateEmail
+      });
+
+      // Set NEW httpOnly cookie with updated JWT
+      const isProduction = process.env.NODE_ENV === 'production';
+      const cookieMaxAge = 2 * 60 * 60 * 1000; // 2 hours
+
+      res.cookie('access_token', token, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'strict' : 'lax',
+        maxAge: cookieMaxAge,
+        path: '/'
+      });
+
+      console.log(`[UserController] New JWT token generated with role: ${updatedUser.role}`);
+      
       res.status(200).json(updatedUser);
       
     } catch (error) {

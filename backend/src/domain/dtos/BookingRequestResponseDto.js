@@ -23,7 +23,9 @@ class BookingRequestResponseDto {
     createdAt,
     updatedAt,
     // Optional populated trip data (for list responses)
-    trip = null
+    trip = null,
+    // Optional populated passenger data (for driver view)
+    passenger = null
   }) {
     this.id = id;
     this.tripId = tripId;
@@ -36,6 +38,16 @@ class BookingRequestResponseDto {
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
 
+    // If passenger is populated, include passenger info
+    if (passenger) {
+      this.passenger = {
+        id: passenger._id?.toString() || passenger.id,
+        firstName: passenger.firstName,
+        lastName: passenger.lastName,
+        corporateEmail: passenger.corporateEmail
+      };
+    }
+
     // If trip is populated, include relevant trip details
     if (trip) {
       this.trip = {
@@ -45,7 +57,14 @@ class BookingRequestResponseDto {
         departureAt: trip.departureAt,
         estimatedArrivalAt: trip.estimatedArrivalAt,
         pricePerSeat: trip.pricePerSeat,
-        status: trip.status
+        status: trip.status,
+        // Include driver info if populated
+        driver: trip.driverId && typeof trip.driverId === 'object' ? {
+          id: trip.driverId._id?.toString() || trip.driverId.id,
+          firstName: trip.driverId.firstName,
+          lastName: trip.driverId.lastName,
+          corporateEmail: trip.driverId.corporateEmail
+        } : undefined
       };
     }
   }
@@ -81,7 +100,7 @@ class BookingRequestResponseDto {
     return new BookingRequestResponseDto({
       id: obj._id?.toString() || obj.id,
       tripId: obj.tripId?._id?.toString() || obj.tripId?.toString() || obj.tripId,
-      passengerId: obj.passengerId?.toString(),
+      passengerId: obj.passengerId?._id?.toString() || obj.passengerId?.toString() || obj.passengerId,
       status: obj.status,
       seats: obj.seats,
       note: obj.note || '',
@@ -90,7 +109,9 @@ class BookingRequestResponseDto {
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
       // Include populated trip if available
-      trip: obj.tripId && typeof obj.tripId === 'object' && obj.tripId.origin ? obj.tripId : null
+      trip: obj.tripId && typeof obj.tripId === 'object' && obj.tripId.origin ? obj.tripId : null,
+      // Include populated passenger if available
+      passenger: obj.passengerId && typeof obj.passengerId === 'object' && obj.passengerId.firstName ? obj.passengerId : null
     });
   }
 

@@ -14,7 +14,8 @@ const connectDB = async () => {
     try {
       await conn.connection.db.collection('users').createIndexes([
         { key: { corporateEmail: 1 }, unique: true, name: 'corporateEmail_unique' },
-        { key: { universityId: 1 }, unique: true, name: 'universityId_unique' }
+        { key: { universityId: 1 }, unique: true, name: 'universityId_unique' },
+        { key: { phone: 1 }, unique: true, name: 'phone_unique' }
       ]);
       
       await conn.connection.db.collection('vehicles').createIndexes([

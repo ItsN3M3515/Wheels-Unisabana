@@ -45,7 +45,18 @@ class BookingRequestService {
       throw new DomainError('Trip offer not found', 'trip_not_found');
     }
 
-    // 2. Verify trip is published
+    // 2. Verify passenger is not the driver (can't book own trip)
+    if (trip.driverId === passengerId) {
+      console.log(
+        `[BookingRequestService] Driver cannot book own trip | passengerId: ${passengerId} | tripId: ${tripId} | driverId: ${trip.driverId}`
+      );
+      throw new DomainError(
+        'No puedes reservar tu propio viaje',
+        'cannot_book_own_trip'
+      );
+    }
+
+    // 3. Verify trip is published
     if (trip.status !== 'published') {
       console.log(
         `[BookingRequestService] Trip not published | tripId: ${tripId} | status: ${trip.status}`
@@ -56,7 +67,7 @@ class BookingRequestService {
       );
     }
 
-    // 3. Verify trip departure is in the future
+    // 4. Verify trip departure is in the future
     if (!trip.isDepartureInFuture()) {
       console.log(
         `[BookingRequestService] Trip departure is in the past | tripId: ${tripId} | departureAt: ${trip.departureAt}`
@@ -67,7 +78,7 @@ class BookingRequestService {
       );
     }
 
-    // 4. Check for duplicate active request
+    // 5. Check for duplicate active request
     const existingBooking = await this.bookingRequestRepository.findActiveBooking(
       passengerId,
       tripId
@@ -83,7 +94,7 @@ class BookingRequestService {
       );
     }
 
-    // 5. Soft capacity check (log warning but don't block)
+    // 6. Soft capacity check (log warning but don't block)
     // Note: Strict capacity enforcement happens during driver acceptance (future story)
     const activeBookingsCount = await this.bookingRequestRepository.countActiveBookingsForTrip(tripId);
     const requestedTotalSeats = activeBookingsCount + seats;
@@ -95,7 +106,7 @@ class BookingRequestService {
       // Don't throw error - allow request to be created (driver will decide during acceptance)
     }
 
-    // 6. Create booking request
+    // 7. Create booking request
     const bookingRequest = await this.bookingRequestRepository.create({
       tripId,
       passengerId,
@@ -445,9 +456,9 @@ class BookingRequestService {
    * @returns {Promise<BookingRequest>} Declined booking request
    * @throws {DomainError} if validation fails
    */
-  async declineBookingRequest(bookingId, driverId) {
+  async declineBookingRequest(bookingId, driverId, reason = null) {
     console.log(
-      `[BookingRequestService] Declining booking request | bookingId: ${bookingId} | driverId: ${driverId}`
+      `[BookingRequestService] Declining booking request | bookingId: ${bookingId} | driverId: ${driverId} | reason: ${reason}`
     );
 
     // 1. Find booking request
@@ -494,7 +505,7 @@ class BookingRequestService {
     }
 
     // 6. Decline booking request (no seat allocation changes)
-    const declinedBooking = await this.bookingRequestRepository.decline(bookingId, driverId);
+    const declinedBooking = await this.bookingRequestRepository.decline(bookingId, driverId, reason);
 
     console.log(
       `[BookingRequestService] Booking request declined | bookingId: ${bookingId} | driverId: ${driverId} | passengerId: ${bookingRequest.passengerId}`

@@ -4,11 +4,16 @@ import useAuthStore from './store/authStore';
 // Pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import Dashboard from './pages/Dashboard';
 import SearchTrips from './pages/passenger/SearchTrips';
-import MyTrips from './pages/driver/MyTrips';
+import PassengerMyTrips from './pages/passenger/MyTrips';
+import DriverMyTrips from './pages/driver/MyTrips';
 import MyProfile from './pages/profile/MyProfile';
 import RegisterVehicle from './pages/driver/RegisterVehicle';
 import BecomeDriver from './pages/driver/BecomeDriver';
+import MyVehicle from './pages/driver/MyVehicle';
+import CreateTripOffer from './pages/driver/CreateTripOffer';
+import TripDetails from './pages/driver/TripDetails';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -16,15 +21,11 @@ import Navbar from "./Navbar";
 import Hero from "./Hero";
 
 function HomePage() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
 
-  // If authenticated, redirect based on role
+  // If authenticated, redirect to dashboard
   if (isAuthenticated) {
-    if (user?.role === 'passenger') {
-      return <Navigate to="/search" replace />;
-    } else if (user?.role === 'driver') {
-      return <Navigate to="/my-trips" replace />;
-    }
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
@@ -33,6 +34,17 @@ function HomePage() {
       <Hero />
     </div>
   );
+}
+
+function MyTripsRouter() {
+  const { user } = useAuthStore();
+  
+  // Render appropriate component based on role
+  if (user?.role === 'driver') {
+    return <DriverMyTrips />;
+  } else {
+    return <PassengerMyTrips />;
+  }
 }
 
 export default function App() {
@@ -44,6 +56,16 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
+        {/* Dashboard - main page after login (both roles) */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+
         {/* Passenger routes */}
         <Route 
           path="/search" 
@@ -53,13 +75,15 @@ export default function App() {
             </ProtectedRoute>
           } 
         />
-
+        
         {/* Driver routes */}
+        {/* Note: /my-trips is used by both roles with different components */}
         <Route 
           path="/my-trips" 
           element={
-            <ProtectedRoute requiredRole="driver">
-              <MyTrips />
+            <ProtectedRoute>
+              {/* This will render different components based on role */}
+              <MyTripsRouter />
             </ProtectedRoute>
           } 
         />
@@ -68,6 +92,30 @@ export default function App() {
           element={
             <ProtectedRoute requiredRole="driver">
               <RegisterVehicle />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/driver/my-vehicle" 
+          element={
+            <ProtectedRoute requiredRole="driver">
+              <MyVehicle />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/driver/create-trip" 
+          element={
+            <ProtectedRoute requiredRole="driver">
+              <CreateTripOffer />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/driver/trips/:id" 
+          element={
+            <ProtectedRoute requiredRole="driver">
+              <TripDetails />
             </ProtectedRoute>
           } 
         />

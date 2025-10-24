@@ -23,9 +23,17 @@ class MongoUserRepository extends UserRepository {
       // CRÍTICO: Traducir E11000 a DuplicateError
       if (error.code === 11000) {
         const field = Object.keys(error.keyPattern)[0];
-        const code = field === 'corporateEmail' 
-          ? 'duplicate_email' 
-          : 'duplicate_universityId';
+        let code;
+        
+        if (field === 'corporateEmail') {
+          code = 'duplicate_email';
+        } else if (field === 'universityId') {
+          code = 'duplicate_universityId';
+        } else if (field === 'phone') {
+          code = 'duplicate_phone';
+        } else {
+          code = `duplicate_${field}`;
+        }
         
         throw new DuplicateError(
           `${field} already exists`,
@@ -109,6 +117,28 @@ class MongoUserRepository extends UserRepository {
       if (!updatedUser) { return null;}
       return User.fromDocument(updatedUser);
     } catch (error) {
+      // Handle duplicate key error
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        let code;
+        
+        if (field === 'corporateEmail') {
+          code = 'duplicate_email';
+        } else if (field === 'universityId') {
+          code = 'duplicate_universityId';
+        } else if (field === 'phone') {
+          code = 'duplicate_phone';
+        } else {
+          code = `duplicate_${field}`;
+        }
+        
+        throw new DuplicateError(
+          `${field} already exists`,
+          code,
+          { field, value: error.keyValue[field] }
+        );
+      }
+      
       if (error.name === 'ValidationError') {
         throw new ValidationError('Invalid update data', 'invalid_schema',this._formatValidationErrors(error));
       }

@@ -2,42 +2,51 @@ import { Link } from 'react-router-dom';
 
 export default function Hero() {
   return (
-    <section className="py-12 sm:py-20 bg-white">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-semibold leading-[1.05] tracking-tight text-neutral-900">
-          Pensado para quienes
-          <br className="hidden sm:block" />
-          se mueven en comunidad.
+    <section style={{ backgroundColor: 'white', minHeight: '80vh' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '96px 24px', textAlign: 'center' }}>
+        {/* Main Title */}
+        <h1 style={{ 
+          fontSize: '6rem', 
+          textAlign: 'left',
+          fontWeight: 'normal', 
+          color: '#1c1917',
+          marginBottom: '1rem',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          Pensado para quienes 
+        <br/>se mueven en comunidad.
         </h1>
 
-        <p className="mt-6 text-lg sm:text-xl text-neutral-700 max-w-2xl">
-          Comodidad y rapidez al alcance de tu celular
+        {/* Subtitle */}
+        <p style={{ 
+          fontSize: '2rem', 
+          color: '#57534e',
+          marginBottom: '40px',
+          textAlign: 'left',
+        }}>
+          Comodidad y rapidez al alcance tuyo
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+        {/* CTA Button */}
+        <div style={{ textAlign: 'left' }}>
           <Link
             to="/register"
-            className="inline-flex items-center justify-center rounded-full bg-brand-600 px-6 py-3 text-base font-semibold text-white shadow-md hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 transition-colors"
+            style={{
+              display: 'inline-block',
+              padding: '0.4% 0.8%',
+              fontSize: '1.5rem',
+              fontWeight: 'normal',
+              color: 'white',
+              backgroundColor: '#032567',
+              borderRadius: '25px',
+              textDecoration: 'none',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#1A6EFF'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#032567'}
           >
             Empieza ahora
-          </Link>
-
-          <Link
-            to="/login"
-            className="group inline-flex items-center text-base sm:text-lg text-neutral-700 hover:text-neutral-900 font-medium transition-colors"
-          >
-            Ya tengo cuenta
-            <svg
-              className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-0.5"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M7 4l6 6-6 6"/>
-            </svg>
           </Link>
         </div>
       </div>

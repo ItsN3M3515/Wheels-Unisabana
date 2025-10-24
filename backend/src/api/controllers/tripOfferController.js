@@ -384,6 +384,191 @@ class TripOfferController {
       next(error);
     }
   }
+
+  async getTripBookings(req, res, next) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      console.log(
+        `[TripOfferController] Get bookings | tripId: ${id} | userId: ${userId} | correlationId: ${req.correlationId}`
+      );
+
+      // Verify trip ownership
+      const trip = await this.tripOfferService.getTripOfferById(id);
+      if (!trip) {
+        return res.status(404).json({
+          code: 'not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (trip.driverId !== userId) {
+        return res.status(403).json({
+          code: 'forbidden',
+          message: 'You do not have permission to view bookings for this trip',
+          correlationId: req.correlationId
+        });
+      }
+
+      // Get bookings from repository with populated passenger data
+      const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+      const BookingRequestResponseDto = require('../../domain/dtos/BookingRequestResponseDto');
+      const bookingRepo = new MongoBookingRequestRepository();
+      
+      const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
+      const docs = await BookingRequestModel.find({ tripId: id })
+        .populate('passengerId', 'firstName lastName corporateEmail')
+        .sort({ createdAt: -1 })
+        .lean();
+
+      res.status(200).json({
+        items: docs.map(doc => BookingRequestResponseDto.fromDocument(doc)),
+        total: docs.length
+      });
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Get bookings failed | tripId: ${req.params.id} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+      next(error);
+    }
+  }
+
+  async acceptBooking(req, res, next) {
+    try {
+      const { tripId, bookingId } = req.params;
+      const userId = req.user.id;
+
+      console.log(
+        `[TripOfferController] Accept booking | tripId: ${tripId} | bookingId: ${bookingId} | userId: ${userId} | correlationId: ${req.correlationId}`
+      );
+
+      // Verify trip ownership
+      const trip = await this.tripOfferService.getTripOfferById(tripId);
+      if (!trip) {
+        return res.status(404).json({
+          code: 'not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (trip.driverId !== userId) {
+        return res.status(403).json({
+          code: 'forbidden',
+          message: 'You do not have permission to manage bookings for this trip',
+          correlationId: req.correlationId
+        });
+      }
+
+      // Accept booking
+      const BookingRequestService = require('../../domain/services/BookingRequestService');
+      const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+      const MongoTripOfferRepository = require('../../infrastructure/repositories/MongoTripOfferRepository');
+      const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
+      
+      const bookingRepo = new MongoBookingRequestRepository();
+      const tripRepo = new MongoTripOfferRepository();
+      const seatLedgerRepo = new MongoSeatLedgerRepository();
+      
+      const bookingService = new BookingRequestService(bookingRepo, tripRepo);
+      
+      const updatedBooking = await bookingService.acceptBookingRequest(bookingId, userId, seatLedgerRepo);
+
+      const BookingRequestResponseDto = require('../../domain/dtos/BookingRequestResponseDto');
+      res.status(200).json(BookingRequestResponseDto.fromDomain(updatedBooking));
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Accept booking failed | tripId: ${req.params.tripId} | bookingId: ${req.params.bookingId} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+      
+      if (error.code === 'booking_not_found') {
+        return res.status(404).json({
+          code: 'not_found',
+          message: 'Booking not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_booking_state') {
+        return res.status(409).json({
+          code: 'invalid_state',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  async declineBooking(req, res, next) {
+    try {
+      const { tripId, bookingId } = req.params;
+      const userId = req.user.id;
+      const { reason } = req.body || {};
+
+      console.log(
+        `[TripOfferController] Decline booking | tripId: ${tripId} | bookingId: ${bookingId} | userId: ${userId} | correlationId: ${req.correlationId}`
+      );
+
+      // Verify trip ownership
+      const trip = await this.tripOfferService.getTripOfferById(tripId);
+      if (!trip) {
+        return res.status(404).json({
+          code: 'not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (trip.driverId !== userId) {
+        return res.status(403).json({
+          code: 'forbidden',
+          message: 'You do not have permission to manage bookings for this trip',
+          correlationId: req.correlationId
+        });
+      }
+
+      // Decline booking
+      const BookingRequestService = require('../../domain/services/BookingRequestService');
+      const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+      const MongoTripOfferRepository = require('../../infrastructure/repositories/MongoTripOfferRepository');
+      
+      const bookingRepo = new MongoBookingRequestRepository();
+      const tripRepo = new MongoTripOfferRepository();
+      
+      const bookingService = new BookingRequestService(bookingRepo, tripRepo);
+      
+      const updatedBooking = await bookingService.declineBookingRequest(bookingId, userId, reason);
+
+      const BookingRequestResponseDto = require('../../domain/dtos/BookingRequestResponseDto');
+      res.status(200).json(BookingRequestResponseDto.fromDomain(updatedBooking));
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Decline booking failed | tripId: ${req.params.tripId} | bookingId: ${req.params.bookingId} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+      
+      if (error.code === 'booking_not_found') {
+        return res.status(404).json({
+          code: 'not_found',
+          message: 'Booking not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_booking_state') {
+        return res.status(409).json({
+          code: 'invalid_state',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
 }
 
 module.exports = TripOfferController;

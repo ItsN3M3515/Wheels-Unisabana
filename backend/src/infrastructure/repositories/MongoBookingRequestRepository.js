@@ -157,7 +157,15 @@ class MongoBookingRequestRepository {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('tripId', 'origin destination departureAt estimatedArrivalAt pricePerSeat status')
+        .populate('tripId', 'origin destination departureAt estimatedArrivalAt pricePerSeat status driverId')
+        .populate({
+          path: 'tripId',
+          populate: {
+            path: 'driverId',
+            select: 'firstName lastName corporateEmail'
+          }
+        })
+        .populate('passengerId', 'firstName lastName corporateEmail')
         .lean(),
       BookingRequestModel.countDocuments(query)
     ]);
@@ -337,14 +345,20 @@ class MongoBookingRequestRepository {
    * @param {string} driverId - Declining driver ID
    * @returns {Promise<BookingRequest>} Updated booking request
    */
-  async decline(id, driverId) {
+  async decline(id, driverId, reason = null) {
+    const updateData = {
+      status: 'declined',
+      declinedAt: new Date(),
+      declinedBy: driverId
+    };
+
+    if (reason) {
+      updateData.declineReason = reason;
+    }
+
     const doc = await BookingRequestModel.findByIdAndUpdate(
       id,
-      {
-        status: 'declined',
-        declinedAt: new Date(),
-        declinedBy: driverId
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 

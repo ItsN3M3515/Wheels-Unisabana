@@ -79,6 +79,13 @@ class BookingRequestController {
               correlationId: req.correlationId
             });
 
+          case 'cannot_book_own_trip':
+            return res.status(403).json({
+              code: 'cannot_book_own_trip',
+              message: error.message,
+              correlationId: req.correlationId
+            });
+
           default:
             return res.status(400).json({
               code: 'bad_request',
@@ -137,14 +144,14 @@ class BookingRequestController {
       filters.page = parseInt(page, 10);
       filters.limit = parseInt(pageSize, 10);
 
-      // List booking requests via service
-      const result = await this.bookingRequestService.listBookingRequests(
+      // List booking requests via service (with populated trip data)
+      const result = await this.bookingRequestService.listBookingRequestsWithTrip(
         passengerId,
         filters
       );
 
-      // Convert to DTOs (repository returns 'bookings', not 'requests')
-      const items = result.bookings.map(booking => BookingRequestResponseDto.fromDomain(booking));
+      // Convert to DTOs (repository returns Mongoose docs with populated tripId)
+      const items = result.bookings.map(booking => BookingRequestResponseDto.fromDocument(booking));
 
       console.log(
         `[BookingRequestController] Booking requests listed | passengerId: ${passengerId} | total: ${result.total} | returned: ${items.length} | correlationId: ${req.correlationId}`

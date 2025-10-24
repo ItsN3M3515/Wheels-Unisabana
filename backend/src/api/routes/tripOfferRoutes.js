@@ -487,6 +487,48 @@ router.get(
 /**
  * @openapi
  * /drivers/trips/{id}:
+ *   get:
+ *     tags:
+ *       - Trip Offers
+ *     summary: Get a single trip offer (Driver only, owner-only)
+ *     description: Returns details of a specific trip offer. Only the owner driver can view their trips.
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           pattern: '^[a-f\d]{24}$'
+ *         description: Trip offer ID (MongoDB ObjectId)
+ *         example: "66a1b2c3d4e5f6a7b8c9d0e1"
+ *     responses:
+ *       200:
+ *         description: Trip offer details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TripOfferResponse'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Forbidden (not owner or not a driver)
+ *       404:
+ *         description: Trip not found
+ */
+router.get(
+  '/trips/:id',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.getTripOfferById.bind(tripOfferController)
+);
+
+/**
+ * @openapi
+ * /drivers/trips/{id}:
  *   patch:
  *     tags:
  *       - Trip Offers
@@ -828,6 +870,42 @@ router.delete(
   requireCsrf,
   validateRequest(tripIdParamSchema, 'params'),
   tripOfferController.cancelTripOffer.bind(tripOfferController)
+);
+
+/**
+ * Get bookings for a trip
+ */
+router.get(
+  '/trips/:id/bookings',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.getTripBookings.bind(tripOfferController)
+);
+
+/**
+ * Accept a booking
+ */
+router.post(
+  '/trips/:tripId/bookings/:bookingId/accept',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  tripOfferController.acceptBooking.bind(tripOfferController)
+);
+
+/**
+ * Decline a booking
+ */
+router.post(
+  '/trips/:tripId/bookings/:bookingId/decline',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  tripOfferController.declineBooking.bind(tripOfferController)
 );
 
 module.exports = router;
