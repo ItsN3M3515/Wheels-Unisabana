@@ -39,6 +39,7 @@ build/Release
 
 # Dependency directories
 node_modules/
+**/node_modules/
 jspm_packages/
 
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -68,6 +69,8 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
@@ -142,6 +145,17 @@ vite.config.ts.timestamp-*
 backend/uploads/
 backend/token.txt
 backend/*.token
+
+# JSON files (except package.json and package-lock.json)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!jsconfig.json
+!tailwind.config.js
+!postcss.config.js
+!vite.config.js
+!vercel.json
 
 # IDE
 .vscode/

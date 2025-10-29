@@ -84,6 +84,12 @@ const tripOfferSchema = new mongoose.Schema(
       default: 'published',
       index: true
     },
+    routeDescription: {
+      type: String,
+      maxlength: 500,
+      default: '',
+      trim: true
+    },
     notes: {
       type: String,
       maxlength: 500,

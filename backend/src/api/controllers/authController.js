@@ -74,8 +74,8 @@ class AuthController {
 
       res.cookie('access_token', token, {
         httpOnly: true,              // CRITICAL: Prevents XSS attacks (JS cannot read)
-        secure: isProduction,        // HTTPS only in production
-        sameSite: isProduction ? 'strict' : 'lax', // CSRF protection
+        secure: true,                // Always require HTTPS (Vercel uses HTTPS)
+        sameSite: 'none',            // Allow cross-site cookies (required for different Vercel domains)
         maxAge: cookieMaxAge,
         path: '/'                    // Available to all routes
       });
@@ -153,12 +153,10 @@ class AuthController {
 
     // Clear the access_token cookie with EXACT same attributes as when set
     // This is critical for the cookie to be properly removed
-    const isProduction = process.env.NODE_ENV === 'production';
-    
     res.clearCookie('access_token', {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'strict' : 'lax',
+      secure: true,
+      sameSite: 'none',
       path: '/'
     });
 

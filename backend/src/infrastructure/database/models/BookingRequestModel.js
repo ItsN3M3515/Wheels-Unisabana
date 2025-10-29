@@ -85,6 +85,12 @@ const bookingRequestSchema = new mongoose.Schema(
       ref: 'User',
       default: null
     },
+    declineReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Decline reason cannot exceed 500 characters'],
+      default: ''
+    },
     canceledAt: {
       type: Date,
       default: null
