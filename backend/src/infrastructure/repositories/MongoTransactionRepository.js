@@ -24,7 +24,9 @@ class MongoTransactionRepository extends TransactionRepository {
     try {
       const model = TransactionModel.fromEntity(transaction);
       const saved = await model.save();
-      return saved.toEntity();
+      // Return domain Transaction instance
+      const obj = saved.toEntity();
+      return new Transaction(obj);
     } catch (error) {
       // Handle duplicate key errors
       if (error.code === 11000) {
@@ -47,8 +49,9 @@ class MongoTransactionRepository extends TransactionRepository {
     const model = await TransactionModel
       .findById(transactionId)
       .select('+providerClientSecret'); // Include sensitive field
-
-    return model ? model.toEntity() : null;
+    if (!model) return null;
+    const obj = model.toEntity();
+    return new Transaction(obj);
   }
 
   /**
@@ -63,7 +66,10 @@ class MongoTransactionRepository extends TransactionRepository {
       .findOne({ providerPaymentIntentId })
       .select('+providerClientSecret');
 
-    return model ? model.toEntity() : null;
+    if (!model) return null;
+
+    const obj = model.toEntity();
+    return new Transaction(obj);
   }
 
   /**
@@ -78,7 +84,7 @@ class MongoTransactionRepository extends TransactionRepository {
       .sort({ createdAt: -1 })
       .select('+providerClientSecret');
 
-    return models.map(model => model.toEntity());
+    return models.map(model => new Transaction(model.toEntity()));
   }
 
   /**
@@ -101,8 +107,8 @@ class MongoTransactionRepository extends TransactionRepository {
       })
       .select('+providerClientSecret')
       .sort({ createdAt: -1 }); // Most recent first
-
-    return model ? model.toEntity() : null;
+    if (!model) return null;
+    return new Transaction(model.toEntity());
   }
 
   /**
@@ -143,7 +149,7 @@ class MongoTransactionRepository extends TransactionRepository {
     ]);
 
     return {
-      items: models.map(model => model.toEntity()),
+      items: models.map(model => new Transaction(model.toEntity())),
       total
     };
   }  /**
@@ -164,28 +170,46 @@ class MongoTransactionRepository extends TransactionRepository {
     if (!model) {
       throw new Error(`Transaction ${transactionId} not found`);
     }
+    // Minimal, self-contained transition validation (avoids requiring domain entity)
+    const terminalStates = ['succeeded', 'failed', 'canceled', 'refunded'];
+    const activeStates = ['requires_payment_method', 'processing'];
 
-    // Convert to entity for business logic validation
-    const transaction = model.toEntity();
+    const current = model.status;
 
-    // Apply status update (validates transition)
-    transaction.updateStatus(newStatus, details);
+    // Prevent updates to terminal states
+    if (terminalStates.includes(current)) {
+      throw new Error(`Cannot update transaction ${transactionId}: already in terminal state ${current}`);
+    }
 
-    // Update model
-    model.status = transaction.status;
-    model.processedAt = transaction.processedAt;
-    if (transaction.errorCode) {
-      model.errorCode = transaction.errorCode;
+    // Allowed transitions
+    const validTransitions = {
+      requires_payment_method: ['processing', 'succeeded', 'failed', 'canceled'],
+      processing: ['succeeded', 'failed', 'canceled']
+    };
+
+    const allowedNext = validTransitions[current] || [];
+    if (!allowedNext.includes(newStatus)) {
+      throw new Error(`Invalid transition from ${current} to ${newStatus} for transaction ${transactionId}`);
     }
-    if (transaction.errorMessage) {
-      model.errorMessage = transaction.errorMessage;
+
+    // Apply update
+    model.status = newStatus;
+    if (details.metadata) {
+      model.metadata = { ...(model.metadata || {}), ...details.metadata };
     }
-    if (transaction.metadata) {
-      model.metadata = transaction.metadata;
+    if (details.errorCode) model.errorCode = details.errorCode;
+    if (details.errorMessage) model.errorMessage = details.errorMessage;
+    if (['succeeded', 'failed', 'canceled', 'refunded'].includes(newStatus) && !model.processedAt) {
+      model.processedAt = new Date();
     }
+
+    // Ensure updatedAt is set (defensive): mongoose should set timestamps automatically,
+    // but setting explicitly avoids cases where middleware/settings cause missing updatedAt
+    model.updatedAt = new Date();
 
     await model.save();
-    return model.toEntity();
+    const obj = model.toEntity();
+    return new Transaction(obj);
   }
 
   /**

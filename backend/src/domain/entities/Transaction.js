@@ -49,6 +49,7 @@ class Transaction {
     errorMessage,
     metadata,
     createdAt,
+    updatedAt,
     processedAt
   }) {
     this.id = id;
@@ -66,6 +67,7 @@ class Transaction {
     this.errorMessage = errorMessage;
     this.metadata = metadata || {};
     this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
     this.processedAt = processedAt;
   }
 

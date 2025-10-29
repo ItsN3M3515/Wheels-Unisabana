@@ -84,17 +84,30 @@ class PaymentController {
         clientSecret: dto.clientSecret
       });
     } catch (error) {
+      // Normalize error shape so global errorHandler can reliably map to HTTP status
+      const normalizeError = require('../utils/errorNormalizer');
+      const normalized = normalizeError(error);
+
       req.log.error(
         {
           correlationId,
-          error: error.message,
-          code: error.code,
+          error: normalized.message || error.message,
+          code: normalized.code || error.code,
           stack: error.stack
         },
         'Failed to create payment intent'
       );
 
-      next(error);
+      // If this is a client error (4xx), respond directly to keep behavior explicit
+      if (normalized.statusCode && normalized.statusCode >= 400 && normalized.statusCode < 500) {
+        return res.status(normalized.statusCode).json({
+          code: normalized.code || 'error',
+          message: normalized.message || 'Bad request',
+          correlationId
+        });
+      }
+
+      next(normalized);
     }
   }
 
@@ -135,16 +148,19 @@ class PaymentController {
 
       return res.json(dto);
     } catch (error) {
+      const normalizeError = require('../utils/errorNormalizer');
+      const normalized = normalizeError(error);
+
       req.log.error(
         {
           correlationId,
-          error: error.message,
-          code: error.code
+          error: normalized.message || error.message,
+          code: normalized.code
         },
         'Failed to get transaction'
       );
 
-      next(error);
+      next(normalized);
     }
   }
 
@@ -213,17 +229,20 @@ class PaymentController {
 
       return res.json(response);
     } catch (error) {
+      const normalizeError = require('../utils/errorNormalizer');
+      const normalized = normalizeError(error);
+
       req.log.error(
         {
           correlationId,
-          error: error.message,
-          code: error.code,
+          error: normalized.message || error.message,
+          code: normalized.code,
           stack: error.stack
         },
         'Failed to get transactions'
       );
 
-      next(error);
+      next(normalized);
     }
   }
 }

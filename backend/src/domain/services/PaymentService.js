@@ -87,7 +87,21 @@ class PaymentService {
     );
 
     if (existingTransaction) {
-      if (existingTransaction.isSucceeded()) {
+      // Defensive: existingTransaction may be a domain Transaction instance or
+      // a plain object (depending on repository implementation). Check both.
+      let isSucceeded = false;
+      try {
+        if (typeof existingTransaction.isSucceeded === 'function') {
+          isSucceeded = existingTransaction.isSucceeded();
+        } else {
+          isSucceeded = existingTransaction.status === 'succeeded';
+        }
+      } catch (checkErr) {
+        // Defensive fallback: avoid throwing due to malformed return object
+        isSucceeded = existingTransaction && existingTransaction.status === 'succeeded';
+      }
+
+      if (isSucceeded) {
         throw new BookingAlreadyPaidError('Booking has already been paid', {
           bookingId,
           transactionId: existingTransaction.id

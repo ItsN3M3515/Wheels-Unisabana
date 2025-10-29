@@ -141,14 +141,31 @@ function cleanupUploads(subfolder = 'vehicles') {
   /**
    * Create a test user in database
    */
-  async function createTestUser(role = 'passenger', email = null) {
+  async function createTestUser(arg = 'passenger', email = null) {
+    // Accept either (role[, email]) or an object { fullName, corporateEmail, role }
     const UserModel = require('../../src/infrastructure/database/models/UserModel');
-    const randomId = Math.floor(300000 + Math.random() * 99999);
-    const corporateEmail = email || `test${randomId}@unisabana.edu.co`;
+    let role = 'passenger';
+    let corporateEmail = email;
+    let firstName = 'Test';
+    let lastName = 'Passenger';
+
+    if (typeof arg === 'object' && arg !== null) {
+      const obj = arg;
+      role = obj.role || 'passenger';
+      corporateEmail = obj.corporateEmail || email || `test${Math.floor(300000 + Math.random() * 99999)}@unisabana.edu.co`;
+      if (obj.fullName) {
+        const parts = obj.fullName.split(' ');
+        firstName = parts[0] || firstName;
+        lastName = parts.slice(1).join(' ') || lastName;
+      }
+    } else {
+      role = arg || 'passenger';
+      corporateEmail = email || `test${Math.floor(300000 + Math.random() * 99999)}@unisabana.edu.co`;
+    }
 
     const user = await UserModel.create({
-      firstName: 'Test',
-      lastName: role === 'driver' ? 'Driver' : 'Passenger',
+      firstName,
+      lastName: role === 'driver' ? 'Driver' : lastName,
       corporateEmail,
       universityId: `U${Math.floor(100000 + Math.random() * 899999)}`,
       phone: '+573001234567',
@@ -156,10 +173,15 @@ function cleanupUploads(subfolder = 'vehicles') {
       role
     });
 
+    // Return an object that resembles a Mongoose document so tests can access
+    // both `_id` (ObjectId) and `id` (string) depending on their expectations.
     return {
+      _id: user._id,
       id: user._id.toString(),
       corporateEmail: user.corporateEmail,
-      role: user.role
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName
     };
   }
 
@@ -205,23 +227,52 @@ function cleanupUploads(subfolder = 'vehicles') {
   /**
    * Create a test trip in database
    */
-  async function createTestTrip(driverId, vehicleId, options = {}) {
+  async function createTestTrip(driverIdOrOptions, vehicleId, options = {}) {
     const TripOfferModel = require('../../src/infrastructure/database/models/TripOfferModel');
-  
+
+    // Support two call styles:
+    //  - createTestTrip(driverId, vehicleId, options)
+    //  - createTestTrip({ driverId, vehicleId, origin, destination, ... })
+    let driverId = driverIdOrOptions;
+    if (typeof driverIdOrOptions === 'object' && driverIdOrOptions !== null && !driverIdOrOptions._bsontype) {
+      // object style
+      const obj = driverIdOrOptions;
+      driverId = obj.driverId;
+      vehicleId = obj.vehicleId;
+      options = obj;
+    }
+
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    // Normalize origin/destination if provided as string
+    let origin = options.origin;
+    if (typeof origin === 'string') {
+      origin = { text: origin, geo: { lat: 4.8611, lng: -74.0315 } };
+    }
+    if (!origin) {
+      origin = { text: 'Universidad de La Sabana', geo: { lat: 4.8611, lng: -74.0315 } };
+    }
+
+    let destination = options.destination;
+    if (typeof destination === 'string') {
+      destination = { text: destination, geo: { lat: 4.6706, lng: -74.0554 } };
+    }
+    if (!destination) {
+      destination = { text: 'Centro Comercial Andino', geo: { lat: 4.6706, lng: -74.0554 } };
+    }
+
+    // Ensure vehicleId exists: create a test vehicle for the driver if missing
+    if (!vehicleId) {
+      // createTestVehicle returns a string id
+      vehicleId = await createTestVehicle(driverId, generateRandomPlate());
+    }
 
     const trip = await TripOfferModel.create({
       driverId,
       vehicleId,
-      origin: options.origin || {
-        text: 'Universidad de La Sabana',
-        geo: { lat: 4.8611, lng: -74.0315 }
-      },
-      destination: options.destination || {
-        text: 'Centro Comercial Andino',
-        geo: { lat: 4.6706, lng: -74.0554 }
-      },
+      origin,
+      destination,
       departureAt: options.departureAt || tomorrow,
       estimatedArrivalAt: options.estimatedArrivalAt || new Date(tomorrow.getTime() + 2 * 60 * 60 * 1000),
       pricePerSeat: options.pricePerSeat || 15000,
@@ -230,15 +281,24 @@ function cleanupUploads(subfolder = 'vehicles') {
       notes: options.notes || ''
     });
 
-    return trip._id.toString();
+    return trip;
   }
 
   /**
    * Create a test booking request in database
    */
-  async function createTestBookingRequest(passengerId, tripId, options = {}) {
+  async function createTestBookingRequest(passengerIdOrOptions, tripId, options = {}) {
     const BookingRequestModel = require('../../src/infrastructure/database/models/BookingRequestModel');
-  
+
+    // Support both styles: (passengerId, tripId, options) or ({ passengerId, tripId, seats, status })
+    let passengerId = passengerIdOrOptions;
+    if (typeof passengerIdOrOptions === 'object' && passengerIdOrOptions !== null && !passengerIdOrOptions._bsontype) {
+      const obj = passengerIdOrOptions;
+      passengerId = obj.passengerId;
+      tripId = obj.tripId;
+      options = obj;
+    }
+
     const booking = await BookingRequestModel.create({
       passengerId,
       tripId,
@@ -247,7 +307,7 @@ function cleanupUploads(subfolder = 'vehicles') {
       status: options.status || 'pending'
     });
 
-    return booking._id.toString();
+    return booking;
   }
 
   /**
@@ -265,6 +325,13 @@ function cleanupUploads(subfolder = 'vehicles') {
     await VehicleModel.deleteMany({});
     await UserModel.deleteMany({ corporateEmail: /@unisabana\.edu\.co/ });
     await SeatLedgerModel.deleteMany({});
+    // Ensure payment-related collections are also cleaned between tests
+    try {
+      const TransactionModel = require('../../src/infrastructure/database/models/TransactionModel');
+      await TransactionModel.deleteMany({});
+    } catch (err) {
+      // If the model doesn't exist or an error occurs, ignore for test cleanup
+    }
   }
 
 module.exports = {
@@ -272,11 +339,30 @@ module.exports = {
   disconnectTestDB,
   clearDatabase,
   createTestUser,
-    loginUser,
-    createTestVehicle,
-    createTestTrip,
-    createTestBookingRequest,
-    cleanupTestData,
+  loginUser,
+  createTestVehicle,
+  createTestTrip,
+  createTestBookingRequest,
+  // Backwards compatibility aliases expected by older tests
+  createTestBooking: createTestBookingRequest,
+  cleanupTestData,
+  // Test helpers for auth & csrf used by integration tests
+  generateAuthToken: function(user) {
+    // AuthService.signAccessToken is synchronous in this codebase
+    const AuthService = require('../../src/domain/services/AuthService');
+    const authService = new AuthService();
+    const payload = {
+      sub: user.id || (user._id && user._id.toString()),
+      role: user.role,
+      email: user.corporateEmail
+    };
+    const token = authService.signAccessToken(payload);
+    return { token };
+  },
+  generateCsrfToken: function() {
+    const { generateCsrfToken } = require('../../src/utils/csrf');
+    return generateCsrfToken();
+  },
   generateRandomPlate,
   createTestImage,
   createLargeTestFile,

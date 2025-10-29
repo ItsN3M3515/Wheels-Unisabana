@@ -77,7 +77,7 @@ const transactionSchema = new mongoose.Schema({
   },
   providerClientSecret: {
     type: String,
-    required: true,
+    required: false,
     select: false // Sensitive: don't return by default
   },
 
@@ -113,19 +113,17 @@ const transactionSchema = new mongoose.Schema({
     default: {}
   },
 
-  // Timestamps
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    index: true
-  },
   processedAt: {
     type: Date,
     default: null,
     index: true
   }
 }, {
-  timestamps: false, // Custom timestamp handling
+  // Let mongoose manage createdAt and updatedAt fields
+  timestamps: {
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  },
   collection: 'transactions'
 });
 
@@ -160,15 +158,15 @@ transactionSchema.pre('save', function(next) {
   next();
 });
 
-// Instance method: Convert to domain entity
+// Instance method: Convert to plain domain-like object
+// Return a plain object representation instead of requiring the domain entity
 transactionSchema.methods.toEntity = function() {
-  const Transaction = require('../../domain/entities/Transaction');
-  return new Transaction({
+  return {
     id: this._id.toString(),
-    bookingId: this.bookingId.toString(),
-    tripId: this.tripId.toString(),
-    driverId: this.driverId.toString(),
-    passengerId: this.passengerId.toString(),
+    bookingId: this.bookingId ? this.bookingId.toString() : null,
+    tripId: this.tripId ? this.tripId.toString() : null,
+    driverId: this.driverId ? this.driverId.toString() : null,
+    passengerId: this.passengerId ? this.passengerId.toString() : null,
     amount: this.amount,
     currency: this.currency,
     provider: this.provider,
@@ -177,10 +175,11 @@ transactionSchema.methods.toEntity = function() {
     status: this.status,
     errorCode: this.errorCode,
     errorMessage: this.errorMessage,
-    metadata: this.metadata,
+    metadata: this.metadata || {},
     createdAt: this.createdAt,
+    updatedAt: this.updatedAt,
     processedAt: this.processedAt
-  });
+  };
 };
 
 // Static method: Create from domain entity
