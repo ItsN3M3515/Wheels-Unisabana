@@ -384,6 +384,34 @@ export default function Dashboard() {
                         Mi vehículo
                       </button>
                     )}
+
+                    {!isDriver && (
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          navigate('/transactions');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          textAlign: 'left',
+                          fontSize: '0.9rem',
+                          color: '#1c1917',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.2s',
+                          fontFamily: 'Inter, sans-serif',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      >
+                        Historial de pagos
+                      </button>
+                    )}
                   </div>
 
                   {/* Logout */}
@@ -509,8 +537,13 @@ export default function Dashboard() {
             {/* Driver Content */}
             {isDriver && (
               <>
-                {/* CTA Button - Offer new trip */}
-                <div style={{ marginBottom: '40px' }}>
+                {/* CTA Buttons */}
+                <div style={{ 
+                  marginBottom: '40px',
+                  display: 'flex',
+                  gap: '16px',
+                  flexWrap: 'wrap'
+                }}>
                   <button
                     onClick={() => navigate('/driver/create-trip')}
                     style={{
@@ -542,6 +575,38 @@ export default function Dashboard() {
                   >
                     <span style={{ fontSize: '1.5rem' }}>+</span>
                     Ofrecer nuevo viaje
+                  </button>
+                  
+                  <button
+                    onClick={() => navigate('/driver/booking-requests')}
+                    style={{
+                      padding: '0.75rem 2rem',
+                      fontSize: '1.2rem',
+                      fontWeight: 'normal',
+                      color: '#032567',
+                      backgroundColor: 'white',
+                      border: '2px solid #032567',
+                      borderRadius: '25px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      fontFamily: 'Inter, sans-serif',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = '#f8fafc';
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = 'white';
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
+                    }}
+                  >
+                    💰 Ver Reservas y Pagos
                   </button>
                 </div>
 

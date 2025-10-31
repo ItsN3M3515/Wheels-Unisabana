@@ -84,6 +84,15 @@ export async function publishTripOffer(tripId) {
 }
 
 /**
+ * Complete a trip offer (update status to 'completed')
+ * @param {string} tripId - Trip offer ID
+ * @returns {Promise<Object>} - Updated trip offer
+ */
+export async function completeTripOffer(tripId) {
+  return updateTripOffer(tripId, { status: 'completed' });
+}
+
+/**
  * Get booking requests for a specific trip
  * @param {string} tripId - Trip offer ID
  * @param {Object} [filters] - Optional filters

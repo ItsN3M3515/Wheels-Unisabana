@@ -4,6 +4,7 @@ import useAuthStore from '../../store/authStore';
 import { getMyBookings, cancelBooking } from '../../api/booking';
 import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
+import PaymentButton from '../../components/payments/PaymentButton';
 
 export default function MyTrips() {
   const navigate = useNavigate();
@@ -805,15 +806,47 @@ export default function MyTrips() {
                     borderRadius: '12px',
                     border: '1px solid #86efac'
                   }}>
-                    <p style={{
-                      fontSize: '0.9rem',
-                      color: '#15803d',
-                      margin: 0,
-                      fontFamily: 'Inter, sans-serif',
-                      fontWeight: '500'
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '8px'
                     }}>
-                      Viaje confirmado. ¡Nos vemos pronto!
-                    </p>
+                      <p style={{
+                        fontSize: '0.9rem',
+                        color: '#15803d',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: '500'
+                      }}>
+                        Viaje confirmado. ¡Nos vemos pronto!
+                      </p>
+                      {!booking.isPaid && (
+                        <div style={{ marginLeft: '12px' }}>
+                          <PaymentButton 
+                            booking={booking}
+                            onPaymentSuccess={(paymentIntent, booking) => {
+                              // Update booking status in local state
+                              setBookings(prev => prev.map(b => 
+                                b.id === booking.id ? { ...b, isPaid: true } : b
+                              ));
+                            }}
+                            className="text-xs px-3 py-1"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    {booking.isPaid && (
+                      <p style={{
+                        fontSize: '0.8rem',
+                        color: '#16a34a',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif',
+                        fontWeight: '600'
+                      }}>
+                        ✅ Pago completado
+                      </p>
+                    )}
                   </div>
                 )}
 

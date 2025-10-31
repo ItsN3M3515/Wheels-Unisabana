@@ -5,6 +5,7 @@ import { searchTrips } from '../../api/trip';
 import { createBooking } from '../../api/booking';
 import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
+import SimpleReservation from '../../components/payments/SimpleReservation';
 
 export default function SearchTrips() {
   const navigate = useNavigate();
@@ -1178,7 +1179,7 @@ export default function SearchTrips() {
         </div>
       )}
 
-      {/* Booking Modal */}
+      {/* Simple Booking Modal */}
       {showBookingModal && selectedTrip && !bookingSuccess && (
         <div
           style={{
@@ -1195,190 +1196,69 @@ export default function SearchTrips() {
         >
           <div
             style={{
-              maxWidth: '500px',
+              maxWidth: '600px',
               width: '100%',
               backgroundColor: 'white',
               borderRadius: '16px',
               padding: '32px',
-              boxShadow: '0 20px 25px rgba(0,0,0,0.15)'
+              boxShadow: '0 20px 25px rgba(0,0,0,0.15)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <h2 style={{
-              fontSize: '1.8rem',
-              fontWeight: 'normal',
-              color: '#1c1917',
-              marginBottom: '8px',
-              fontFamily: 'Inter, sans-serif'
-            }}>
-              Solicitar reserva
-            </h2>
-            
-            <p style={{
-              fontSize: '0.95rem',
-              color: '#57534e',
-              marginBottom: '24px',
-              fontFamily: 'Inter, sans-serif'
-            }}>
-              {selectedTrip.origin.text} → {selectedTrip.destination.text}
-            </p>
-
-            {/* Seats selector */}
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '1.1rem',
-                fontWeight: '500',
-                color: '#1c1917',
-                marginBottom: '8px',
-                fontFamily: 'Inter, sans-serif'
-              }}>
-                Número de asientos
-              </label>
-              <input
-                type="number"
-                min="1"
-                max={selectedTrip.totalSeats}
-                value={bookingSeats}
-                onChange={(e) => setBookingSeats(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedTrip.totalSeats))}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  border: '2px solid transparent',
-                  borderRadius: '25px',
-                  backgroundColor: '#d9d9d9',
-                  outline: 'none',
-                  transition: 'all 0.2s',
-                  fontFamily: 'Inter, sans-serif'
-                }}
-              />
-              <p style={{
-                fontSize: '0.85rem',
-                color: '#57534e',
-                marginTop: '6px',
-                margin: '6px 0 0 0',
-                fontFamily: 'Inter, sans-serif'
-              }}>
-                Disponibles: {selectedTrip.totalSeats} • Precio por asiento: {formatPrice(selectedTrip.pricePerSeat)}
-              </p>
-            </div>
-
-            {/* Total price */}
             <div style={{
-              backgroundColor: '#f0f9ff',
-              padding: '16px',
-              borderRadius: '12px',
-              marginBottom: '20px',
-              textAlign: 'center'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px'
             }}>
-              <p style={{
-                fontSize: '0.9rem',
-                color: '#57534e',
-                margin: '0 0 4px 0',
-                fontFamily: 'Inter, sans-serif'
-              }}>
-                Total a pagar
-              </p>
-              <p style={{
+              <h2 style={{
                 fontSize: '1.8rem',
-                fontWeight: '600',
-                color: '#032567',
+                fontWeight: 'normal',
+                color: '#1c1917',
                 margin: 0,
                 fontFamily: 'Inter, sans-serif'
               }}>
-                {formatPrice(selectedTrip.pricePerSeat * bookingSeats)}
-              </p>
-            </div>
-
-            {/* Note */}
-            <div style={{ marginBottom: '24px' }}>
-              <label style={{
-                display: 'block',
-                fontSize: '1.1rem',
-                fontWeight: '500',
-                color: '#1c1917',
-                marginBottom: '8px',
-                fontFamily: 'Inter, sans-serif'
-              }}>
-                Mensaje para el conductor (opcional)
-              </label>
-              <textarea
-                rows="3"
-                placeholder="Ej: Llevaré una maleta pequeña"
-                value={bookingNote}
-                onChange={(e) => setBookingNote(e.target.value)}
-                maxLength={200}
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  fontSize: '15px',
-                  border: '2px solid transparent',
-                  borderRadius: '16px',
-                  backgroundColor: '#d9d9d9',
-                  outline: 'none',
-                  transition: 'all 0.2s',
-                  fontFamily: 'Inter, sans-serif',
-                  resize: 'vertical'
-                }}
-              />
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px' }}>
+                Solicitar Reserva
+              </h2>
               <button
                 onClick={() => setShowBookingModal(false)}
-                disabled={bookingLoading}
                 style={{
-                  flex: 1,
-                  padding: '12px',
-                  fontSize: '1rem',
-                  fontWeight: 'normal',
-                  color: '#57534e',
-                  backgroundColor: 'white',
-                  border: '2px solid #d9d9d9',
-                  borderRadius: '25px',
-                  cursor: bookingLoading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  fontFamily: 'Inter, sans-serif'
-                }}
-                onMouseEnter={(e) => {
-                  if (!bookingLoading) e.target.style.backgroundColor = '#f5f5f4';
-                }}
-                onMouseLeave={(e) => {
-                  if (!bookingLoading) e.target.style.backgroundColor = 'white';
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSubmitBooking}
-                disabled={bookingLoading}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  fontSize: '1rem',
-                  fontWeight: 'normal',
-                  color: 'white',
-                  backgroundColor: bookingLoading ? '#94a3b8' : '#032567',
+                  background: 'none',
                   border: 'none',
-                  borderRadius: '25px',
-                  cursor: bookingLoading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  fontFamily: 'Inter, sans-serif',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  if (!bookingLoading) e.target.style.backgroundColor = '#1A6EFF';
-                }}
-                onMouseLeave={(e) => {
-                  if (!bookingLoading) e.target.style.backgroundColor = '#032567';
+                  fontSize: '24px',
+                  color: '#6b7280',
+                  cursor: 'pointer',
+                  padding: '4px'
                 }}
               >
-                {bookingLoading ? 'Enviando...' : 'Enviar solicitud'}
+                ×
               </button>
             </div>
+
+            {/* Simple Reservation Component */}
+            <SimpleReservation
+              trip={selectedTrip}
+              onSuccess={(booking) => {
+                setBookingSuccess(true);
+                setToast({
+                  message: '¡Reserva enviada exitosamente!',
+                  type: 'success'
+                });
+                
+                setTimeout(() => {
+                  setShowBookingModal(false);
+                  setSelectedTrip(null);
+                  setBookingSuccess(false);
+                  setBookingSeats(1);
+                  setBookingNote('');
+                  loadTrips(); // Reload trips to update availability
+                }, 2000);
+              }}
+              onCancel={() => setShowBookingModal(false)}
+            />
           </div>
         </div>
       )}

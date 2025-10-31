@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import { getMyTripOffers, cancelTripOffer } from '../../api/tripOffer';
+import TripProgressButton from '../../components/payments/TripProgressButton';
 import logo from '../../assets/images/UniSabana Logo.png';
 
 export default function MyTrips() {
@@ -27,7 +28,8 @@ export default function MyTrips() {
       setError(null);
       
       const filters = {};
-      if (statusFilter !== 'all') {
+      // Only send valid backend statuses to the API
+      if (statusFilter !== 'all' && statusFilter !== 'in_progress') {
         filters.status = statusFilter;
       }
       
@@ -66,7 +68,24 @@ export default function MyTrips() {
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, trip) => {
+    // Check if trip is currently in progress
+    if (trip && isTripInProgress(trip)) {
+      return (
+        <span style={{
+          padding: '6px 16px',
+          borderRadius: '20px',
+          fontSize: '0.85rem',
+          fontWeight: '500',
+          backgroundColor: '#fef3c7',
+          color: '#92400e',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          En Progreso
+        </span>
+      );
+    }
+
     const badges = {
       draft: { bg: '#f5f5f4', color: '#57534e', text: 'Borrador' },
       published: { bg: '#e0f2fe', color: '#032567', text: 'Publicado' },
@@ -109,7 +128,46 @@ export default function MyTrips() {
     return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
   };
 
-  const filteredTrips = statusFilter === 'all' ? trips : trips.filter(t => t.status === statusFilter);
+  // Check if a trip is currently in progress (within time window)
+  const isTripInProgress = (trip) => {
+    console.log('Checking if trip is in progress:', {
+      tripId: trip.id,
+      status: trip.status,
+      departureAt: trip.departureAt
+    });
+    
+    if (trip.status !== 'published') {
+      console.log('Trip not published, status:', trip.status);
+      return false;
+    }
+    
+    const now = new Date();
+    const departureTime = new Date(trip.departureAt);
+    
+    // Trip is in progress if:
+    // 1. It's within 30 minutes before departure time (pickup window)
+    // 2. It's within 2 hours after departure time (travel window)
+    const pickupWindowStart = new Date(departureTime.getTime() - 30 * 60 * 1000); // 30 min before
+    const travelWindowEnd = new Date(departureTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours after
+    
+    const isInProgress = now >= pickupWindowStart && now <= travelWindowEnd;
+    
+    console.log('Trip progress check:', {
+      now: now.toISOString(),
+      departureTime: departureTime.toISOString(),
+      pickupWindowStart: pickupWindowStart.toISOString(),
+      travelWindowEnd: travelWindowEnd.toISOString(),
+      isInProgress
+    });
+    
+    return isInProgress;
+  };
+
+  const filteredTrips = statusFilter === 'all' 
+    ? trips 
+    : statusFilter === 'in_progress'
+    ? trips.filter(t => t.status === 'published') // TEMPORARY: Show all published trips for testing
+    : trips.filter(t => t.status === statusFilter);
 
   if (loading) {
     return (
@@ -472,6 +530,7 @@ export default function MyTrips() {
           {[
             { id: 'all', label: 'Todos' },
             { id: 'published', label: 'Publicados' },
+            { id: 'in_progress', label: 'En Progreso' },
             { id: 'completed', label: 'Completados' },
             { id: 'canceled', label: 'Cancelados' }
           ].map(filter => (
@@ -570,7 +629,7 @@ export default function MyTrips() {
                   <div style={{ flex: 1 }}>
                     {/* Status Badge */}
                     <div style={{ marginBottom: '16px' }}>
-                      {getStatusBadge(trip.status)}
+                      {getStatusBadge(trip.status, trip)}
                     </div>
 
                     {/* Route */}
@@ -689,6 +748,7 @@ export default function MyTrips() {
                         </p>
                       </div>
                     )}
+
                   </div>
 
                   {/* Actions */}
@@ -698,15 +758,29 @@ export default function MyTrips() {
                     gap: '12px',
                     marginLeft: '24px'
                   }}>
+                    {/* Trip Progress Button - Only for trips currently in progress */}
+                    {trip.status === 'published' && (
+                      <TripProgressButton
+                        trip={trip}
+                        onStatusChange={(trip, status, paymentStatus) => {
+                          console.log('Trip status changed:', status, paymentStatus);
+                          // Reload trips when status changes to completed
+                          if (status === 'completed') {
+                            loadTrips();
+                          }
+                        }}
+                      />
+                    )}
+                    
                     <button
                       onClick={() => navigate(`/driver/trips/${trip.id}`)}
                       style={{
                         padding: '10px 20px',
                         fontSize: '0.95rem',
                         fontWeight: 'normal',
-                        color: 'white',
-                        backgroundColor: '#032567',
-                        border: 'none',
+                        color: '#032567',
+                        backgroundColor: 'white',
+                        border: '2px solid #032567',
                         borderRadius: '25px',
                         cursor: 'pointer',
                         transition: 'all 0.2s',
@@ -714,8 +788,8 @@ export default function MyTrips() {
                         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                         whiteSpace: 'nowrap'
                       }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#1A6EFF'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = '#032567'}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f8fafc'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
                     >
                       Ver detalles
                     </button>

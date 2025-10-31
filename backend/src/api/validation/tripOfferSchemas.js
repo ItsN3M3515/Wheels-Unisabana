@@ -137,10 +137,10 @@ const updateTripOfferSchema = Joi.object({
       'number.min': 'totalSeats must be at least 1'
     }),
   status: Joi.string()
-    .valid('draft', 'published', 'canceled')
+    .valid('draft', 'published', 'canceled', 'completed')
     .optional()
     .messages({
-      'any.only': 'status must be one of: draft, published, canceled'
+      'any.only': 'status must be one of: draft, published, canceled, completed'
     }),
   notes: Joi.string()
     .max(500)

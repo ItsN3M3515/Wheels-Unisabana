@@ -165,3 +165,5 @@ backend/*.token
 # OS
 .DS_Store
 Thumbs.db
+
+*.json

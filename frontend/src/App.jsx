@@ -14,6 +14,9 @@ import BecomeDriver from './pages/driver/BecomeDriver';
 import MyVehicle from './pages/driver/MyVehicle';
 import CreateTripOffer from './pages/driver/CreateTripOffer';
 import TripDetails from './pages/driver/TripDetails';
+import BookingRequests from './pages/driver/BookingRequests';
+import PaymentPage from './pages/payments/PaymentPage';
+import TransactionsPage from './pages/payments/TransactionsPage';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -119,6 +122,14 @@ export default function App() {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="/driver/booking-requests" 
+          element={
+            <ProtectedRoute requiredRole="driver">
+              <BookingRequests />
+            </ProtectedRoute>
+          } 
+        />
 
         {/* Profile route (accessible to both roles) */}
         <Route 
@@ -136,6 +147,24 @@ export default function App() {
           element={
             <ProtectedRoute requiredRole="passenger">
               <BecomeDriver />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Payment routes (passenger only) */}
+        <Route 
+          path="/payment/:bookingId" 
+          element={
+            <ProtectedRoute requiredRole="passenger">
+              <PaymentPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/transactions" 
+          element={
+            <ProtectedRoute requiredRole="passenger">
+              <TransactionsPage />
             </ProtectedRoute>
           } 
         />

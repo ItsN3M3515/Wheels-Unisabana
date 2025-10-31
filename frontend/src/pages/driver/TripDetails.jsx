@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getTripOfferById, getTripBookings, acceptBooking, declineBooking } from '../../api/tripOffer';
+import PassengerPaymentConfirmation from '../../components/payments/PassengerPaymentConfirmation';
 import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
 
@@ -672,6 +673,22 @@ export default function TripDetails() {
                         }}>
                           "{booking.note}"
                         </p>
+                      )}
+                      
+                      {/* Payment Confirmation - Only for accepted bookings in completed trips */}
+                      {booking.status === 'accepted' && trip.status === 'completed' && (
+                        <div style={{ marginTop: '12px' }}>
+                          <PassengerPaymentConfirmation
+                            passenger={{
+                              id: booking.passenger.id,
+                              name: `${booking.passenger.firstName} ${booking.passenger.lastName}`,
+                              email: booking.passenger.corporateEmail
+                            }}
+                            onPaymentConfirmed={(passenger, paid) => {
+                              console.log(`Payment ${paid ? 'confirmed' : 'not received'} for ${passenger.name}`);
+                            }}
+                          />
+                        </div>
                       )}
                     </div>
                   ))}
