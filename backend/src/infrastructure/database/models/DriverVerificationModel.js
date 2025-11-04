@@ -22,7 +22,11 @@ const driverVerificationSchema = new mongoose.Schema({
   soatNumberHash: { type: String, required: false },
   submittedAt: { type: Date, required: false },
   lastUpdatedAt: { type: Date, required: false },
-  adminNotes: [{ adminId: String, notes: String, createdAt: Date }]
+  adminNotes: [{ adminId: String, notes: String, createdAt: Date }],
+  // Review metadata
+  decisionAt: { type: Date, required: false },
+  reviewedBy: { type: String, required: false },
+  rejectionReason: { type: String, required: false }
 }, { timestamps: true });
 
 module.exports = mongoose.model('DriverVerification', driverVerificationSchema);

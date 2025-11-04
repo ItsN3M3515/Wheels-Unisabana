@@ -21,6 +21,7 @@ const InAppNotification = require('../../infrastructure/database/models/InAppNot
 const NotificationDelivery = require('../../infrastructure/database/models/NotificationDeliveryModel');
 const notificationMetrics = require('../../domain/services/notificationMetrics');
 const { v4: uuidv4 } = require('uuid');
+const DriverVerification = require('../../infrastructure/database/models/DriverVerificationModel');
 
 class InternalController {
   constructor() {
@@ -279,6 +280,92 @@ class InternalController {
     } catch (error) {
       console.error(`[InternalController] Dispatch failed | error: ${error.message} | correlationId: ${req.correlationId}`);
       next(error);
+    }
+  }
+
+  /**
+   * PATCH /admin/drivers/:driverId/verification
+   * Admin reviews a driver's verification profile (approve | reject)
+   */
+  async reviewDriverVerification(req, res, next) {
+    try {
+      const adminId = req.user.sub || req.user.id;
+      const { driverId } = req.params;
+      const { action, reason, comment } = req.body || {};
+
+      console.log(`[InternalController] Review driver verification | driverId: ${driverId} | action: ${action} | adminId: ${adminId} | correlationId: ${req.correlationId}`);
+
+      // Load profile
+      const profile = await DriverVerification.findOne({ userId: driverId });
+      if (!profile) {
+        return res.status(404).json({ code: 'not_found', message: 'Verification profile not found', correlationId: req.correlationId });
+      }
+
+      // Only allow from pending_review
+      if (profile.status !== 'pending_review') {
+        return res.status(409).json({ code: 'invalid_state', message: 'Profile is not pending_review', correlationId: req.correlationId });
+      }
+
+      // Validate action body (action validated by middleware schema). Additional business checks:
+      const now = new Date();
+
+      // Ensure required docs are present and not expired at decision time
+      const missing = [];
+      const expired = [];
+      const requiredDocs = ['govIdFront','driverLicense','soat'];
+      requiredDocs.forEach(k => {
+        const d = profile.documents && profile.documents[k];
+        if (!d || !d.storagePath) missing.push(k);
+        else if (d.expiresAt && new Date(d.expiresAt) < now) expired.push(k);
+      });
+
+      if (action === 'approve') {
+        if (missing.length > 0 || expired.length > 0) {
+          return res.status(400).json({ code: 'invalid_schema', message: `Cannot approve: missing docs: ${missing.join(', ') || 'none'}; expired: ${expired.join(', ') || 'none'}`, correlationId: req.correlationId });
+        }
+
+        profile.status = 'verified';
+        profile.decisionAt = now;
+        profile.reviewedBy = adminId;
+        profile.rejectionReason = undefined;
+        if (comment) profile.adminNotes = (profile.adminNotes || []).concat([{ adminId, notes: comment, createdAt: now }]);
+        await profile.save();
+
+        // Send notification to driver (in-app)
+        try {
+          await InAppNotification.create({ userId: driverId, type: 'driver.verification', title: 'Verification approved', body: 'Your verification documents have been approved.', data: { decision: 'approved' }, correlationId: req.correlationId });
+        } catch (e) { console.warn('[InternalController] Failed to create in-app notification for approval', e.message); }
+
+        return res.status(200).json({ driverId, status: 'verified', decisionAt: profile.decisionAt, reviewedBy: profile.reviewedBy });
+      }
+
+      // action === 'reject'
+      if (action === 'reject') {
+        // reason is required by validation schema; include check defensively
+        if (!reason || String(reason).trim().length === 0) {
+          return res.status(400).json({ code: 'invalid_schema', message: 'Missing or invalid reason', correlationId: req.correlationId });
+        }
+
+        profile.status = 'rejected';
+        profile.decisionAt = now;
+        profile.reviewedBy = adminId;
+        profile.rejectionReason = reason;
+        profile.adminNotes = (profile.adminNotes || []).concat([{ adminId, notes: comment || reason, createdAt: now }]);
+        await profile.save();
+
+        // Send notification to driver (in-app)
+        try {
+          await InAppNotification.create({ userId: driverId, type: 'driver.verification', title: 'Verification rejected', body: `Your verification was rejected: ${reason}`, data: { decision: 'rejected', reason }, correlationId: req.correlationId });
+        } catch (e) { console.warn('[InternalController] Failed to create in-app notification for rejection', e.message); }
+
+        return res.status(200).json({ driverId, status: 'rejected', reason: profile.rejectionReason, decisionAt: profile.decisionAt, reviewedBy: profile.reviewedBy });
+      }
+
+      // Should not reach: action already validated
+      return res.status(400).json({ code: 'invalid_schema', message: 'Unsupported action', correlationId: req.correlationId });
+    } catch (err) {
+      console.error('[InternalController] reviewDriverVerification failed', err);
+      next(err);
     }
   }
 }

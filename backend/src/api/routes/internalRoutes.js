@@ -216,4 +216,18 @@ router.post(
   internalController.dispatchNotification.bind(internalController)
 );
 
+/**
+ * PATCH /admin/drivers/:driverId/verification
+ * Admin review endpoint: approve | reject
+ */
+const { reviewDriverVerificationBodySchema } = require('../validation/internalSchemas');
+router.patch(
+  '/admin/drivers/:driverId/verification',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewDriverVerificationBodySchema, 'body'),
+  internalController.reviewDriverVerification.bind(internalController)
+);
+
 module.exports = router;

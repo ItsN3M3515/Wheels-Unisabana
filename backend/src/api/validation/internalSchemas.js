@@ -70,9 +70,24 @@ const validateTemplateBodySchema = Joi.object({
   partials: Joi.object().pattern(Joi.string(), Joi.string()).optional()
 }).options({ abortEarly: false });
 
+/**
+ * Schema for PATCH /admin/drivers/:driverId/verification
+ * Body: { action: 'approve' | 'reject', reason?: string, comment?: string }
+ */
+const reviewDriverVerificationBodySchema = Joi.object({
+  action: Joi.string().valid('approve','reject').required(),
+  reason: Joi.when('action', {
+    is: 'reject',
+    then: Joi.string().min(3).required(),
+    otherwise: Joi.forbidden()
+  }),
+  comment: Joi.string().allow('').optional()
+}).options({ abortEarly: false });
+
 module.exports = {
   runJobQuerySchema
   , renderTemplateBodySchema
   , dispatchNotificationBodySchema
   , validateTemplateBodySchema
+  , reviewDriverVerificationBodySchema
 };
