@@ -6,6 +6,7 @@ const { generalRateLimiter } = require('../middlewares/rateLimiter');
 const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
+const requireDriverVerified = require('../middlewares/verifyDriver');
 
 const router = express.Router();
 const tripOfferController = new TripOfferController();
@@ -292,6 +293,7 @@ router.post(
   generalRateLimiter,
   authenticate,
   requireRole('driver'),
+  requireDriverVerified,
   requireCsrf,
   validateRequest(createTripOfferSchema),
   tripOfferController.createTripOffer.bind(tripOfferController)
