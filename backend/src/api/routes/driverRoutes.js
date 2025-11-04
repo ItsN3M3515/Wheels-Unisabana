@@ -340,6 +340,14 @@ router.post(
   driverController.submitVerification.bind(driverController)
 );
 
+// GET my verification profile (owner-only, driver)
+router.get(
+  '/verification',
+  authenticate,
+  requireRole('driver'),
+  driverController.getMyVerification.bind(driverController)
+);
+
 /**
  * @route   DELETE /drivers/trips/:tripId
  * @desc    Cancel a trip with cascade to all bookings (US-3.4.2)

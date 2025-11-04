@@ -383,6 +383,41 @@ class DriverController {
   }
 
   /**
+   * GET /drivers/verification
+   * Owner-only read of current verification profile (non-PII)
+   */
+  async getMyVerification(req, res, next) {
+    try {
+      const userId = req.user.sub || req.user.id;
+      const correlationId = req.correlationId;
+
+      const profile = await DriverVerification.findOne({ userId }).lean();
+      if (!profile) {
+        return res.status(404).json({ code: 'not_found', message: 'No verification profile yet', correlationId });
+      }
+
+      // Build documents summary without exposing storage paths or raw filenames
+      const docs = [];
+      const docKeys = [ 'govIdFront', 'govIdBack', 'driverLicense', 'soat' ];
+      docKeys.forEach((k) => {
+        const d = profile.documents && profile.documents[k];
+        if (d && d.uploadedAt) {
+          const ext = d.storagePath ? require('path').extname(d.storagePath) : '';
+          // Masked name: use type + ext (no original filename)
+          const maskedName = `${k}${ext}`;
+          docs.push({ type: k, uploadedAt: d.uploadedAt, name: maskedName });
+        }
+      });
+
+      const review = (profile.adminNotes && profile.adminNotes.length > 0) ? profile.adminNotes[profile.adminNotes.length - 1] : null;
+
+      return res.status(200).json({ status: profile.status, submittedAt: profile.submittedAt, documents: docs, review });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * DELETE /drivers/trips/:tripId
    * 
    * Cancel a trip with cascade to all bookings (US-3.4.2).
