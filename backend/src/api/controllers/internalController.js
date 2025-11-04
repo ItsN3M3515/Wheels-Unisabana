@@ -133,7 +133,7 @@ class InternalController {
 
       let rendered;
       try {
-        rendered = this.templateService.render(channel, type, variables, locale);
+        rendered = await this.templateService.render(channel, type, variables, locale, { sanitize: true, inlineCss: false });
       } catch (err) {
         // expected errors from renderer come as { code, message }
         if (err && err.code && err.message) {

@@ -8,6 +8,16 @@
  * This is a minimal renderer used by admin preview endpoints.
  */
 
+const sanitizeHtml = require('sanitize-html');
+const { htmlToText } = require('html-to-text');
+let inlineCss;
+try {
+  // optional dependency at runtime
+  inlineCss = require('inline-css');
+} catch (e) {
+  inlineCss = null;
+}
+
 class NotificationTemplateService {
   constructor() {
     // metadata describing required variables per template
@@ -16,9 +26,19 @@ class NotificationTemplateService {
         required: ['firstName', 'amount', 'currency']
       }
     };
+    // sanitize-html allowlist
+    this.sanitizeOptions = {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat([ 'img' ]),
+      allowedAttributes: Object.assign({}, sanitizeHtml.defaults.allowedAttributes, {
+        a: [ 'href', 'name', 'target', 'rel' ],
+        img: [ 'src', 'alt', 'title', 'width', 'height' ]
+      }),
+      // Disallow inline event handlers, scripts, iframes by default
+      nonTextTags: [ 'script', 'style', 'iframe', 'noscript' ]
+    };
   }
 
-  render(channel, type, variables = {}, locale = 'en') {
+  async render(channel, type, variables = {}, locale = 'en', options = { sanitize: true, inlineCss: false }) {
     // Normalize
     const ch = (channel || '').toLowerCase();
     const t = type;
@@ -33,8 +53,36 @@ class NotificationTemplateService {
     }
 
     switch (t) {
-      case 'payment.succeeded':
-        return this._renderPaymentSucceeded(ch, variables, locale);
+      case 'payment.succeeded': {
+        const out = this._renderPaymentSucceeded(ch, variables, locale);
+        // Post-process: sanitize, inline CSS (optional), and ensure text fallback
+        let html = out.html || '';
+        let text = out.text || '';
+
+        if (options && options.sanitize) {
+          html = sanitizeHtml(html, this.sanitizeOptions);
+        }
+
+        if (options && options.inlineCss && inlineCss) {
+          try {
+            // inlineCss expects a promise; provide a base URL placeholder
+            // eslint-disable-next-line no-await-in-loop
+            html = await inlineCss(html, { url: ' ' });
+          } catch (e) {
+            // If inlining fails, continue with sanitized HTML
+            // log silently in tests; caller can enable debug logs if desired
+          }
+        }
+
+        // Always generate plain-text from sanitized HTML to avoid leaking raw input
+        try {
+          text = htmlToText(html, { wordwrap: 130 });
+        } catch (e) {
+          text = out.text || '';
+        }
+
+        return { subject: out.subject, html, text };
+      }
 
       default:
         // Unsupported template type
@@ -87,8 +135,8 @@ class NotificationTemplateService {
     // Build templates per locale
     if (locale === 'es') {
       const subject = '¡Tu pago fue exitoso!';
-      const html = `<h1>Gracias, ${firstName}!</h1><p>Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.</p>`;
-      const text = `Gracias, ${firstName}! Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.`;
+  const html = `<h1>Gracias, ${firstName}!</h1><p>Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.</p>`;
+  const text = `Gracias, ${firstName}! Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.`;
 
       if (channel === 'in-app') {
         return {
@@ -98,7 +146,7 @@ class NotificationTemplateService {
         };
       }
 
-      return { subject, html, text };
+    return { subject, html, text };
     }
 
     // Default: English
