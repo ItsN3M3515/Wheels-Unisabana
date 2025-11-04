@@ -131,7 +131,7 @@ const handleUploadError = (err, req, res, next) => {
     }
   }
   
-  if (err && err.message === 'Unsupported file type. Only JPEG, PNG, and WebP are allowed.') {
+  if (err && err.message && err.message.includes('Unsupported file type')) {
     return res.status(400).json({
       code: 'invalid_file_type',
       message: 'Unsupported MIME type',

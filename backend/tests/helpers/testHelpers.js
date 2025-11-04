@@ -163,12 +163,14 @@ function cleanupUploads(subfolder = 'vehicles') {
       corporateEmail = email || `test${Math.floor(300000 + Math.random() * 99999)}@unisabana.edu.co`;
     }
 
+    // Generate a semi-random phone to avoid duplicate key collisions in tests
+    const phone = `+57300${Math.floor(100000 + Math.random() * 900000)}`;
     const user = await UserModel.create({
       firstName,
       lastName: role === 'driver' ? 'Driver' : lastName,
       corporateEmail,
       universityId: `U${Math.floor(100000 + Math.random() * 899999)}`,
-      phone: '+573001234567',
+      phone,
       password: 'hashed-password',
       role
     });

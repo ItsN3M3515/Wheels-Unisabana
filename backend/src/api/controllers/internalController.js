@@ -127,7 +127,15 @@ class InternalController {
           });
       }
 
-      // Map to DTO
+      // Special-case: verification-expiry-scan returns a different shape
+      if (name === 'verification-expiry-scan') {
+        console.log(
+          `[InternalController] Job completed | name: ${name} | newlyExpired: ${result.newlyExpired} | remindersSent: ${result.remindersSent} | correlationId: ${req.correlationId}`
+        );
+        return res.status(200).json(result);
+      }
+
+      // Map to DTO for lifecycle jobs that use the lifecycle DTO shape
       const responseDto = LifecycleJobResultDto.fromJobResult(result);
 
       console.log(
