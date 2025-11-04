@@ -186,6 +186,27 @@ router.post(
   internalController.validateTemplate.bind(internalController)
 );
 
+/**
+ * GET /admin/notifications/metrics
+ * Admin-only: aggregated delivery metrics per type/channel/date range
+ */
+router.get(
+  '/admin/notifications/metrics',
+  authenticate,
+  requireRole('admin'),
+  async (req, res) => {
+    const { from, to } = req.query;
+    const metricsService = require('../../domain/services/notificationMetrics');
+    try {
+      const result = await metricsService.queryRange(from || new Date(), to || new Date());
+      res.status(200).json(result);
+    } catch (err) {
+      console.error('[InternalRoutes] metrics query failed', err);
+      res.status(500).json({ code: 'server_error', message: 'Metrics query failed' });
+    }
+  }
+);
+
 router.post(
   '/notifications/dispatch',
   authenticate,

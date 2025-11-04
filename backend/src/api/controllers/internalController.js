@@ -18,6 +18,7 @@ const MongoUserRepository = require('../../infrastructure/repositories/MongoUser
 const NotificationTemplateService = require('../../domain/services/NotificationTemplateService');
 const InAppNotification = require('../../infrastructure/database/models/InAppNotificationModel');
 const NotificationDelivery = require('../../infrastructure/database/models/NotificationDeliveryModel');
+const notificationMetrics = require('../../domain/services/notificationMetrics');
 const { v4: uuidv4 } = require('uuid');
 
 class InternalController {
@@ -199,6 +200,13 @@ class InternalController {
           data: variables,
           correlationId: req.correlationId
         });
+
+        // metrics: in-app rendered & delivered/attempted
+        try {
+          await notificationMetrics.increment({ type, channel: 'inApp', deltas: { rendered: 1, attempted: 1, delivered: 1 } });
+        } catch (e) {
+          console.warn('[InternalController] metrics increment failed for inApp', e);
+        }
       }
 
       // Simulate email dispatch by creating a NotificationDelivery record
@@ -211,6 +219,13 @@ class InternalController {
           status: 'pending',
           meta: { intentType: type, queuedBy: req.user.sub }
         });
+
+        // metrics: email rendered & attempted
+        try {
+          await notificationMetrics.increment({ type, channel: 'email', deltas: { rendered: 1, attempted: 1 } });
+        } catch (e) {
+          console.warn('[InternalController] metrics increment failed for email', e);
+        }
       }
 
       return res.status(201).json({

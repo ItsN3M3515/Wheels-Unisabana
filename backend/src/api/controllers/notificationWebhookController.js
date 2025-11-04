@@ -2,6 +2,7 @@ const emailProvider = require('../../infrastructure/notificationProviders/emailP
 const DeliveryAttempt = require('../../infrastructure/database/models/DeliveryAttemptModel');
 const NotificationDelivery = require('../../infrastructure/database/models/NotificationDeliveryModel');
 const InAppNotification = require('../../infrastructure/database/models/InAppNotificationModel');
+const notificationMetrics = require('../../domain/services/notificationMetrics');
 
 function redactEmail(email) {
   if (!email || typeof email !== 'string') return null;
@@ -91,6 +92,23 @@ class NotificationWebhookController {
 
       // Fire-and-forget: don't block webhook response on DB availability; log any errors
       NotificationDelivery.findOneAndUpdate({ providerMessageId }, ndUpdate, { upsert: true, new: true })
+        .then(async (nd) => {
+          // update metrics based on status if we have intentType
+          try {
+            const intentType = (nd && nd.meta && nd.meta.intentType) || (evt.metadata && evt.metadata.intentType) || evt.metadata && evt.metadata.type;
+            if (intentType) {
+              const d = {};
+              if (status === 'delivered') d.delivered = 1;
+              if (status === 'bounced') d.bounced = 1;
+              if (status === 'complained') d.complained = 1;
+              if (Object.keys(d).length > 0) {
+                await notificationMetrics.increment({ type: intentType, channel: 'email', deltas: d });
+              }
+            }
+          } catch (err) {
+            console.error('[NotificationWebhook] metrics increment failed:', err);
+          }
+        })
         .catch(err => console.error('[NotificationWebhook] Error upserting NotificationDelivery:', err));
     } catch (err) {
       console.error('[NotificationWebhook] Error upserting NotificationDelivery:', err);
