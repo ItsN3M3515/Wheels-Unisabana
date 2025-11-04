@@ -9,16 +9,32 @@
  */
 
 class NotificationTemplateService {
-  constructor() {}
+  constructor() {
+    // metadata describing required variables per template
+    this.templateMeta = {
+      'payment.succeeded': {
+        required: ['firstName', 'amount', 'currency']
+      }
+    };
+  }
 
-  render(channel, type, variables = {}) {
+  render(channel, type, variables = {}, locale = 'en') {
     // Normalize
     const ch = (channel || '').toLowerCase();
     const t = type;
 
+    // Ensure required variables are present for the template
+    const meta = this.templateMeta[t];
+    if (meta && Array.isArray(meta.required)) {
+      const missing = meta.required.filter(k => variables[k] === undefined || variables[k] === null || variables[k] === '');
+      if (missing.length) {
+        throw { code: 'invalid_schema', message: `Variables missing: ${missing.join(', ')}` };
+      }
+    }
+
     switch (t) {
       case 'payment.succeeded':
-        return this._renderPaymentSucceeded(ch, variables);
+        return this._renderPaymentSucceeded(ch, variables, locale);
 
       default:
         // Unsupported template type
@@ -31,72 +47,70 @@ class NotificationTemplateService {
     return v;
   }
 
-  _formatCurrency(amount, currency) {
+  _formatCurrency(amount, currency, locale) {
     try {
       const code = (currency || 'COP').toUpperCase();
-      // Use Intl.NumberFormat; fall back to simple formatting when unsupported
-      const formatter = new Intl.NumberFormat('en-US', {
+      const nf = new Intl.NumberFormat(locale === 'es' ? 'es-CO' : 'en-US', {
         style: 'currency',
         currency: code,
         maximumFractionDigits: 0
       });
-      return formatter.format(amount / 100); // assume amount is in cents (e.g., 6000 -> 60.00) OR user's API uses cents
+      // Use amount as whole units (the app appears to pass 6000 -> "6,000")
+      return nf.format(amount);
     } catch (e) {
-      // Fallback: show raw amount with currency
       if (typeof amount === 'number') return `${currency || ''} ${amount}`;
       return `${currency || ''} ${amount || ''}`;
     }
   }
 
-  _formatTime(isoString) {
+  _formatTime(isoString, locale) {
     if (!isoString) return 'an unknown time';
     try {
       const d = new Date(isoString);
       if (Number.isNaN(d.getTime())) return 'an unknown time';
-      // HH:MM in 24-hour
-      return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      // HH:MM in 24-hour for many locales; pick a locale-aware formatter
+      const opts = { hour: '2-digit', minute: '2-digit' };
+      return d.toLocaleTimeString(locale === 'es' ? 'es-CO' : 'en-GB', opts);
     } catch (e) {
       return 'an unknown time';
     }
   }
 
-  _renderPaymentSucceeded(channel, vars) {
+  _renderPaymentSucceeded(channel, vars, locale) {
     const firstName = this._safeFirstName(vars.firstName);
     const amount = typeof vars.amount === 'number' ? vars.amount : Number(vars.amount || 0);
-    // Many systems store amounts as cents; the example shows 6000 -> COP 6,000 (so it's likely integer amount in currency units).
-    // We'll present amount in a reasonable way: if amount > 1000 assume it's in cents? To avoid guessing, format as provided.
-    // The acceptance example expects "COP 6,000" for 6000 — we'll format without dividing.
     const currency = vars.currency || 'COP';
 
-    // Format amount: try to use Intl with no fractional digits and treat amount as whole units
-    let formattedAmount;
-    try {
-      const formatter = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currency.toUpperCase(),
-        maximumFractionDigits: 0
-      });
-      formattedAmount = formatter.format(amount);
-    } catch (e) {
-      formattedAmount = `${currency} ${amount}`;
+    const formattedAmount = this._formatCurrency(amount, currency, locale);
+    const timeStr = this._formatTime(vars.tripTime, locale);
+
+    // Build templates per locale
+    if (locale === 'es') {
+      const subject = '¡Tu pago fue exitoso!';
+      const html = `<h1>Gracias, ${firstName}!</h1><p>Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.</p>`;
+      const text = `Gracias, ${firstName}! Tu pago de ${formattedAmount} fue exitoso para el viaje a las ${timeStr}.`;
+
+      if (channel === 'in-app') {
+        return {
+          subject: 'Pago recibido',
+          html: `<strong>Gracias, ${firstName}!</strong> Tu pago de ${formattedAmount} fue registrado para el viaje a las ${timeStr}.`,
+          text: `Gracias, ${firstName}! Pago de ${formattedAmount} registrado para el viaje a las ${timeStr}.`
+        };
+      }
+
+      return { subject, html, text };
     }
 
-    const timeStr = this._formatTime(vars.tripTime);
-
-    // Build templates
+    // Default: English
     const subject = 'Your payment was successful';
     const html = `<h1>Thanks, ${firstName}!</h1><p>Your payment of ${formattedAmount} was successful for the trip at ${timeStr}.</p>`;
     const text = `Thanks, ${firstName}! Your payment of ${formattedAmount} was successful for the trip at ${timeStr}.`;
 
-    // For in-app channel we keep same structure but shorter subject
     if (channel === 'in-app') {
-      const inAppSubject = 'Payment received';
-      const inAppHtml = `<strong>Thanks, ${firstName}!</strong> Your payment of ${formattedAmount} was recorded for the trip at ${timeStr}.`;
-      const inAppText = `Thanks, ${firstName}! Payment of ${formattedAmount} recorded for the trip at ${timeStr}.`;
       return {
-        subject: inAppSubject,
-        html: inAppHtml,
-        text: inAppText
+        subject: 'Payment received',
+        html: `<strong>Thanks, ${firstName}!</strong> Your payment of ${formattedAmount} was recorded for the trip at ${timeStr}.`,
+        text: `Thanks, ${firstName}! Payment of ${formattedAmount} recorded for the trip at ${timeStr}.`
       };
     }
 

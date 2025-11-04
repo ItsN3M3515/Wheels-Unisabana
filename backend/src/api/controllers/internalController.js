@@ -128,10 +128,19 @@ class InternalController {
    */
   async renderTemplate(req, res, next) {
     try {
-      const { channel, type, variables } = req.body;
-      console.log(`[InternalController] Template preview requested | type: ${type} | channel: ${channel} | adminId: ${req.user.sub} | correlationId: ${req.correlationId}`);
+      const { channel, type, variables, locale = 'en' } = req.body;
+      console.log(`[InternalController] Template preview requested | type: ${type} | channel: ${channel} | locale: ${locale} | adminId: ${req.user.sub} | correlationId: ${req.correlationId}`);
 
-      const rendered = this.templateService.render(channel, type, variables);
+      let rendered;
+      try {
+        rendered = this.templateService.render(channel, type, variables, locale);
+      } catch (err) {
+        // expected errors from renderer come as { code, message }
+        if (err && err.code && err.message) {
+          return res.status(400).json({ code: err.code, message: err.message, correlationId: req.correlationId });
+        }
+        throw err;
+      }
 
       if (!rendered) {
         return res.status(400).json({ code: 'invalid_schema', message: 'Unsupported template type or missing variables', correlationId: req.correlationId });

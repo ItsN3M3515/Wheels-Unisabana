@@ -42,12 +42,8 @@ const runJobQuerySchema = Joi.object({
 const renderTemplateBodySchema = Joi.object({
   channel: Joi.string().valid('email', 'in-app').required(),
   type: Joi.string().valid('payment.succeeded').required(),
-  variables: Joi.object({
-    firstName: Joi.string().required(),
-    amount: Joi.number().required(),
-    currency: Joi.string().required(),
-    tripTime: Joi.string().isoDate().optional()
-  }).required()
+  locale: Joi.string().valid('en','es').default('en'),
+  variables: Joi.object().default({})
 }).options({ abortEarly: false });
 
 /**
