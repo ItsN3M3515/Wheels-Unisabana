@@ -15,6 +15,7 @@ const MongoTripOfferRepository = require('../../infrastructure/repositories/Mong
 const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
 const MongoVehicleRepository = require('../../infrastructure/repositories/MongoVehicleRepository');
 const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
+const NotificationTemplateService = require('../../domain/services/NotificationTemplateService');
 
 class InternalController {
   constructor() {
@@ -31,6 +32,9 @@ class InternalController {
       this.vehicleRepository,
       this.userRepository
     );
+
+    // Template renderer for admin preview
+    this.templateService = new NotificationTemplateService();
   }
 
   /**
@@ -111,6 +115,29 @@ class InternalController {
       console.error(
         `[InternalController] Job execution failed | error: ${error.message} | correlationId: ${req.correlationId}`
       );
+      next(error);
+    }
+  }
+
+  /**
+   * POST /internal/notifications/templates/render
+   * Admin-only preview of templates. Read-only.
+   */
+  async renderTemplate(req, res, next) {
+    try {
+      const { channel, type, variables } = req.body;
+      console.log(`[InternalController] Template preview requested | type: ${type} | channel: ${channel} | adminId: ${req.user.sub} | correlationId: ${req.correlationId}`);
+
+      const rendered = this.templateService.render(channel, type, variables);
+
+      if (!rendered) {
+        return res.status(400).json({ code: 'invalid_schema', message: 'Unsupported template type or missing variables', correlationId: req.correlationId });
+      }
+
+      // Standardize response shape: { subject, html, text }
+      res.status(200).json(rendered);
+    } catch (error) {
+      console.error(`[InternalController] Template preview failed | error: ${error.message} | correlationId: ${req.correlationId}`);
       next(error);
     }
   }

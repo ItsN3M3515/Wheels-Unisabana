@@ -18,6 +18,7 @@ const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
 const validateRequest = require('../middlewares/validateRequest');
 const { runJobQuerySchema } = require('../validation/internalSchemas');
+const { renderTemplateBodySchema } = require('../validation/internalSchemas');
 
 /**
  * @route   POST /internal/jobs/run
@@ -142,6 +143,19 @@ router.post(
   requireCsrf,
   validateRequest(runJobQuerySchema, 'query'),
   internalController.runLifecycleJob
+);
+
+/**
+ * @route POST /internal/notifications/templates/render
+ * @desc  Preview notification templates (admin-only, read-only)
+ * Body: { channel, type, variables }
+ */
+router.post(
+  '/notifications/templates/render',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(renderTemplateBodySchema, 'body'),
+  internalController.renderTemplate
 );
 
 module.exports = router;

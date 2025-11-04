@@ -35,6 +35,22 @@ const runJobQuerySchema = Joi.object({
   abortEarly: false
 });
 
+/**
+ * Schema for POST /internal/notifications/templates/render
+ * Body: { channel: 'email'|'in-app', type: 'payment.succeeded', variables: { ... } }
+ */
+const renderTemplateBodySchema = Joi.object({
+  channel: Joi.string().valid('email', 'in-app').required(),
+  type: Joi.string().valid('payment.succeeded').required(),
+  variables: Joi.object({
+    firstName: Joi.string().required(),
+    amount: Joi.number().required(),
+    currency: Joi.string().required(),
+    tripTime: Joi.string().isoDate().optional()
+  }).required()
+}).options({ abortEarly: false });
+
 module.exports = {
   runJobQuerySchema
+  , renderTemplateBodySchema
 };
