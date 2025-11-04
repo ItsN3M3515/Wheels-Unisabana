@@ -18,7 +18,9 @@ const { requireRole } = require('../middlewares/authenticate');
 const requireCsrf = require('../middlewares/requireCsrf');
 const validateRequest = require('../middlewares/validateRequest');
 const { runJobQuerySchema } = require('../validation/internalSchemas');
-const { renderTemplateBodySchema } = require('../validation/internalSchemas');
+const { renderTemplateBodySchema, dispatchNotificationBodySchema } = require('../validation/internalSchemas');
+const { validateTemplateBodySchema } = require('../validation/internalSchemas');
+const templateRegistry = require('../../domain/services/templateRegistry');
 
 /**
  * @route   POST /internal/jobs/run
@@ -142,7 +144,7 @@ router.post(
   requireRole('admin'),
   requireCsrf,
   validateRequest(runJobQuerySchema, 'query'),
-  internalController.runLifecycleJob
+  internalController.runLifecycleJob.bind(internalController)
 );
 
 /**
@@ -155,7 +157,42 @@ router.post(
   authenticate,
   requireRole('admin'),
   validateRequest(renderTemplateBodySchema, 'body'),
-  internalController.renderTemplate
+  internalController.renderTemplate.bind(internalController)
+);
+
+/**
+ * GET /internal/notifications/templates/registry
+ * Admin-only: list template metadata
+ */
+router.get(
+  '/notifications/templates/registry',
+  authenticate,
+  requireRole('admin'),
+  (req, res) => {
+    const items = templateRegistry.listMetadata();
+    res.status(200).json({ items });
+  }
+);
+
+/**
+ * POST /internal/notifications/templates/validate
+ * Admin-only: validate a draft template payload (no side-effects)
+ */
+router.post(
+  '/notifications/templates/validate',
+  authenticate,
+  requireRole('admin'),
+  validateRequest(validateTemplateBodySchema, 'body'),
+  internalController.validateTemplate.bind(internalController)
+);
+
+router.post(
+  '/notifications/dispatch',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(dispatchNotificationBodySchema, 'body'),
+  internalController.dispatchNotification.bind(internalController)
 );
 
 module.exports = router;

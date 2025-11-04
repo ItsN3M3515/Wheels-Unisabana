@@ -50,7 +50,33 @@ const renderTemplateBodySchema = Joi.object({
   }).required()
 }).options({ abortEarly: false });
 
+/**
+ * Schema for POST /internal/notifications/dispatch
+ */
+const dispatchNotificationBodySchema = Joi.object({
+  channel: Joi.string().valid('email', 'in-app', 'both').default('both'),
+  type: Joi.string().required(),
+  userId: Joi.string().required(),
+  variables: Joi.object().default({})
+}).options({ abortEarly: false });
+
+/**
+ * Schema for POST /internal/notifications/templates/validate
+ * Accepts a draft template payload for validation/linting
+ */
+const validateTemplateBodySchema = Joi.object({
+  type: Joi.string().required(),
+  locale: Joi.string().valid('en','es').default('en'),
+  subject: Joi.string().required(),
+  html: Joi.string().allow('').required(),
+  text: Joi.string().allow('').required(),
+  schema: Joi.object().optional(),
+  partials: Joi.object().pattern(Joi.string(), Joi.string()).optional()
+}).options({ abortEarly: false });
+
 module.exports = {
   runJobQuerySchema
   , renderTemplateBodySchema
+  , dispatchNotificationBodySchema
+  , validateTemplateBodySchema
 };
