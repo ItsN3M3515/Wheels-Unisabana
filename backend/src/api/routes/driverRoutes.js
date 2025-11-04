@@ -18,6 +18,9 @@ const {
   tripIdParamSchema,
   bookingIdParamSchema
 } = require('../validation/bookingRequestSchemas');
+const { listReviewsQuerySchema } = require('../validation/reviewSchemas');
+const ReviewController = require('../controllers/reviewController');
+const reviewController = new ReviewController();
 const { verificationUpload, handleUploadError, cleanupOnError } = require('../middlewares/uploadMiddleware');
 
 /**
@@ -318,6 +321,16 @@ router.post(
   requireCsrf,
   validateRequest(bookingIdParamSchema, 'params'),
   driverController.declineBookingRequest
+);
+
+/**
+ * Public: GET /drivers/:driverId/reviews?page=1&pageSize=10
+ * Lists visible reviews for a driver (public)
+ */
+router.get(
+  '/:driverId/reviews',
+  validateRequest(listReviewsQuerySchema, 'query'),
+  reviewController.listReviewsForDriver.bind(reviewController)
 );
 
 /**
