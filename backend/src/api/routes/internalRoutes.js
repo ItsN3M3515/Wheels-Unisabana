@@ -216,6 +216,17 @@ router.post(
   internalController.dispatchNotification.bind(internalController)
 );
 
+// Admin: generate short-lived preview URL for driver document (admin-only)
+router.get(
+  '/admin/drivers/:driverId/verification/documents/:docType/url',
+  authenticate,
+  requireRole('admin'),
+  internalController.generateDocumentPreviewUrl.bind(internalController)
+);
+
+// Public preview endpoint: serves single-use token-protected documents (no auth)
+router.get('/previews/:token', internalController.servePreviewByToken.bind(internalController));
+
 /**
  * PATCH /admin/drivers/:driverId/verification
  * Admin review endpoint: approve | reject

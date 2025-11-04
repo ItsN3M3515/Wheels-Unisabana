@@ -22,6 +22,7 @@ const NotificationDelivery = require('../../infrastructure/database/models/Notif
 const notificationMetrics = require('../../domain/services/notificationMetrics');
 const { v4: uuidv4 } = require('uuid');
 const DriverVerification = require('../../infrastructure/database/models/DriverVerificationModel');
+const DocumentPreview = require('../../infrastructure/database/models/DocumentPreviewModel');
 
 class InternalController {
   constructor() {
@@ -368,6 +369,98 @@ class InternalController {
       next(err);
     }
   }
+
+      /**
+       * GET /admin/drivers/:driverId/verification/documents/:docType/url
+       * Generates a short-lived, single-use preview URL for admins to view a stored document.
+       */
+      async generateDocumentPreviewUrl(req, res, next) {
+        try {
+          const adminId = req.user.sub || req.user.id;
+          const { driverId, docType } = req.params;
+          const correlationId = req.correlationId;
+
+          console.log(`[InternalController] Generate document preview URL | driverId: ${driverId} | docType: ${docType} | adminId: ${adminId} | correlationId: ${correlationId}`);
+
+          // Validate docType
+          const allowed = ['govIdFront','govIdBack','driverLicense','soat'];
+          if (!allowed.includes(docType)) return res.status(400).json({ code: 'invalid_schema', message: 'Invalid document type', correlationId });
+
+          // Load verification profile
+          const profile = await DriverVerification.findOne({ userId: driverId }).lean();
+          if (!profile) return res.status(404).json({ code: 'not_found', message: 'Verification profile not found', correlationId });
+
+          const doc = profile.documents && profile.documents[docType];
+          if (!doc || !doc.storagePath) return res.status(404).json({ code: 'not_found', message: 'Document not found for this driver', correlationId });
+
+          // Create single-use token and DB record
+          const crypto = require('crypto');
+          const token = crypto.randomBytes(32).toString('hex');
+          const ttlSeconds = 60; // short-lived
+          const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+          await DocumentPreview.create({ token, driverId, docType, createdBy: adminId, createdAt: new Date(), expiresAt, used: false });
+
+          // Build URL to preview endpoint (proxied through app)
+          const url = `${req.protocol}://${req.get('host')}/internal/previews/${token}`;
+
+          return res.status(200).json({ url, expiresInSeconds: ttlSeconds });
+        } catch (err) {
+          console.error('[InternalController] generateDocumentPreviewUrl failed', err);
+          next(err);
+        }
+      }
+
+      /**
+       * GET /internal/previews/:token
+       * Public endpoint that serves the document if token is valid, not expired and not used.
+       * Marks the token as used and records accessor info for audit.
+       */
+      async servePreviewByToken(req, res, next) {
+        try {
+          const { token } = req.params;
+          const record = await DocumentPreview.findOne({ token });
+          if (!record) return res.status(404).json({ code: 'not_found', message: 'Preview not found' });
+
+          const now = new Date();
+          if (record.used || record.expiresAt < now) {
+            return res.status(404).json({ code: 'not_found', message: 'Preview expired or already used' });
+          }
+
+          // Load document path
+          const profile = await DriverVerification.findOne({ userId: record.driverId }).lean();
+          if (!profile) return res.status(404).json({ code: 'not_found', message: 'Driver or document not found' });
+          const doc = profile.documents && profile.documents[record.docType];
+          if (!doc || !doc.storagePath) return res.status(404).json({ code: 'not_found', message: 'Document not found for this driver' });
+
+          const fs = require('fs');
+          const path = require('path');
+          const mime = require('mime-types');
+
+          const filePath = doc.storagePath;
+          if (!fs.existsSync(filePath)) return res.status(404).json({ code: 'not_found', message: 'Document file missing' });
+
+          // Mark token as used (best-effort before streaming)
+          record.used = true;
+          record.usedAt = now;
+          record.accessorIp = req.ip || req.connection.remoteAddress;
+          record.accessorUserAgent = req.get('User-Agent') || '';
+          await record.save();
+
+          // Stream file to client without exposing storage info
+          const filename = path.basename(filePath);
+          const contentType = mime.lookup(filename) || 'application/octet-stream';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+          const stream = fs.createReadStream(filePath);
+          stream.on('error', (err) => { console.error('[InternalController] preview stream error', err); next(err); });
+          stream.pipe(res);
+        } catch (err) {
+          console.error('[InternalController] servePreviewByToken failed', err);
+          next(err);
+        }
+      }
 }
 
 module.exports = new InternalController();
