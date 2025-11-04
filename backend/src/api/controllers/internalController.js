@@ -15,6 +15,7 @@ const MongoTripOfferRepository = require('../../infrastructure/repositories/Mong
 const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
 const MongoVehicleRepository = require('../../infrastructure/repositories/MongoVehicleRepository');
 const MongoUserRepository = require('../../infrastructure/repositories/MongoUserRepository');
+const UserModel = require('../../infrastructure/database/models/UserModel');
 const NotificationTemplateService = require('../../domain/services/NotificationTemplateService');
 const InAppNotification = require('../../infrastructure/database/models/InAppNotificationModel');
 const NotificationDelivery = require('../../infrastructure/database/models/NotificationDeliveryModel');
@@ -187,44 +188,86 @@ class InternalController {
     try {
       const { channel = 'both', type, userId, variables = {} } = req.body;
 
-      // Create in-app notification if requested
-      let createdNotification = null;
-      if (channel === 'in-app' || channel === 'both') {
-        const title = variables.title || (type === 'payment.succeeded' ? 'Payment received' : 'Notification');
-        const body = variables.body || '';
-        createdNotification = await InAppNotification.create({
-          userId,
-          type,
-          title,
-          body,
-          data: variables,
-          correlationId: req.correlationId
-        });
+      // Resolve user preferences (if present) to decide which channels to invoke.
+      // Fallback defaults: email=true, inApp=true, push=false
+      let userDoc = null;
+      try {
+        userDoc = await UserModel.findById(userId).lean();
+      } catch (e) {
+        // ignore lookup errors and treat as no preferences (use defaults)
+        userDoc = null;
+      }
 
-        // metrics: in-app rendered & delivered/attempted
-        try {
-          await notificationMetrics.increment({ type, channel: 'inApp', deltas: { rendered: 1, attempted: 1, delivered: 1 } });
-        } catch (e) {
-          console.warn('[InternalController] metrics increment failed for inApp', e);
+      const prefs = (userDoc && userDoc.notificationPreferences) || {};
+      const channelDefaults = { email: true, inApp: true, push: false };
+
+      const globalChannels = prefs.channels || {};
+      const channelEnabledGlobal = {
+        email: typeof globalChannels.email === 'boolean' ? globalChannels.email : channelDefaults.email,
+        inApp: typeof globalChannels.inApp === 'boolean' ? globalChannels.inApp : channelDefaults.inApp,
+        push: typeof globalChannels.push === 'boolean' ? globalChannels.push : channelDefaults.push
+      };
+
+      const typePrefs = (prefs.types && prefs.types[type]) || null;
+      const shouldSendEmail = typePrefs && typeof typePrefs.email === 'boolean' ? typePrefs.email : channelEnabledGlobal.email;
+      const shouldSendInApp = typePrefs && typeof typePrefs.inApp === 'boolean' ? typePrefs.inApp : channelEnabledGlobal.inApp;
+
+      // Create in-app notification if requested AND allowed by preferences
+      let createdNotification = null;
+      if ((channel === 'in-app' || channel === 'both')) {
+        if (!shouldSendInApp) {
+          console.info({ userId, type, correlationId: req.correlationId }, 'in_app_channel_skipped_by_preferences');
+          try {
+            await notificationMetrics.increment({ type, channel: 'inApp', deltas: { skippedByPreferences: 1 } });
+          } catch (e) {
+            console.warn('[InternalController] metrics increment failed for inApp skippedByPreferences', e);
+          }
+        } else {
+          const title = variables.title || (type === 'payment.succeeded' ? 'Payment received' : 'Notification');
+          const body = variables.body || '';
+          createdNotification = await InAppNotification.create({
+            userId,
+            type,
+            title,
+            body,
+            data: variables,
+            correlationId: req.correlationId
+          });
+
+          // metrics: in-app rendered & delivered/attempted
+          try {
+            await notificationMetrics.increment({ type, channel: 'inApp', deltas: { rendered: 1, attempted: 1, delivered: 1 } });
+          } catch (e) {
+            console.warn('[InternalController] metrics increment failed for inApp', e);
+          }
         }
       }
 
-      // Simulate email dispatch by creating a NotificationDelivery record
+      // Simulate email dispatch by creating a NotificationDelivery record (only if allowed by preferences)
       let delivery = null;
       if (channel === 'email' || channel === 'both') {
-        const providerMessageId = uuidv4();
-        delivery = await NotificationDelivery.create({
-          providerMessageId,
-          notificationId: createdNotification ? createdNotification._id : null,
-          status: 'pending',
-          meta: { intentType: type, queuedBy: req.user.sub }
-        });
+        if (!shouldSendEmail) {
+          console.info({ userId, type, correlationId: req.correlationId }, 'email_channel_skipped_by_preferences');
+          try {
+            await notificationMetrics.increment({ type, channel: 'email', deltas: { skippedByPreferences: 1 } });
+          } catch (e) {
+            console.warn('[InternalController] metrics increment failed for email skippedByPreferences', e);
+          }
+        } else {
+          const providerMessageId = uuidv4();
+          delivery = await NotificationDelivery.create({
+            providerMessageId,
+            notificationId: createdNotification ? createdNotification._id : null,
+            status: 'pending',
+            meta: { intentType: type, queuedBy: req.user.sub }
+          });
 
-        // metrics: email rendered & attempted
-        try {
-          await notificationMetrics.increment({ type, channel: 'email', deltas: { rendered: 1, attempted: 1 } });
-        } catch (e) {
-          console.warn('[InternalController] metrics increment failed for email', e);
+          // metrics: email rendered & attempted
+          try {
+            await notificationMetrics.increment({ type, channel: 'email', deltas: { rendered: 1, attempted: 1 } });
+          } catch (e) {
+            console.warn('[InternalController] metrics increment failed for email', e);
+          }
         }
       }
 
