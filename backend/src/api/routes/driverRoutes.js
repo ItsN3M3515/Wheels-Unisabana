@@ -18,6 +18,7 @@ const {
   tripIdParamSchema,
   bookingIdParamSchema
 } = require('../validation/bookingRequestSchemas');
+const { verificationUpload, handleUploadError, cleanupOnError } = require('../middlewares/uploadMiddleware');
 
 /**
  * @route   GET /drivers/trips/:tripId/booking-requests
@@ -317,6 +318,26 @@ router.post(
   requireCsrf,
   validateRequest(bookingIdParamSchema, 'params'),
   driverController.declineBookingRequest
+);
+
+/**
+ * POST /drivers/verification
+ * Driver submits verification documents
+ */
+router.post(
+  '/verification',
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  verificationUpload.fields([
+    { name: 'govIdFront', maxCount: 1 },
+    { name: 'govIdBack', maxCount: 1 },
+    { name: 'driverLicense', maxCount: 1 },
+    { name: 'soat', maxCount: 1 }
+  ]),
+  handleUploadError,
+  cleanupOnError,
+  driverController.submitVerification.bind(driverController)
 );
 
 /**
