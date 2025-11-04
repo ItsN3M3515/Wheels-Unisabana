@@ -27,6 +27,9 @@ const driverVerificationSchema = new mongoose.Schema({
   decisionAt: { type: Date, required: false },
   reviewedBy: { type: String, required: false },
   rejectionReason: { type: String, required: false }
+  ,
+  // Reminders history to avoid duplicate sends per window (e.g. '30d','7d','1d')
+  remindersSent: [{ window: String, sentAt: Date }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('DriverVerification', driverVerificationSchema);

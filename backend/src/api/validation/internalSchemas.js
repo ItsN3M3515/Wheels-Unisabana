@@ -15,7 +15,7 @@ const Joi = require('joi');
  */
 const runJobQuerySchema = Joi.object({
   name: Joi.string()
-    .valid('complete-trips', 'auto-complete-trips', 'expire-pendings')
+    .valid('complete-trips', 'auto-complete-trips', 'expire-pendings', 'verification-expiry-scan')
     .default('complete-trips')
     .messages({
       'any.only': 'Job name must be one of: complete-trips, auto-complete-trips, expire-pendings'

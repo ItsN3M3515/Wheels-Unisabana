@@ -22,6 +22,7 @@ const NotificationDelivery = require('../../infrastructure/database/models/Notif
 const notificationMetrics = require('../../domain/services/notificationMetrics');
 const { v4: uuidv4 } = require('uuid');
 const DriverVerification = require('../../infrastructure/database/models/DriverVerificationModel');
+const verificationExpiryService = require('../../domain/services/verificationExpiryService');
 const DocumentPreview = require('../../infrastructure/database/models/DocumentPreviewModel');
 
 class InternalController {
@@ -97,6 +98,22 @@ class InternalController {
           result = await this.lifecycleJobService.runExpirePendingsOnly(
             parseInt(pendingTtlHours, 10)
           );
+          break;
+
+        case 'verification-expiry-scan':
+          // Run driver verification expiry scan and reminders
+          try {
+            result = await verificationExpiryService.runExpiryScan({ windowsDays: [30,7,1] });
+            // normalize to expected DTO shape
+            result = {
+              processed: result.processed,
+              newlyExpired: result.newlyExpired,
+              remindersSent: result.remindersSent
+            };
+          } catch (e) {
+            console.error('[InternalController] verification-expiry-scan failed', e);
+            return res.status(500).json({ code: 'server_error', message: 'verification expiry scan failed', correlationId: req.correlationId });
+          }
           break;
 
         default:
