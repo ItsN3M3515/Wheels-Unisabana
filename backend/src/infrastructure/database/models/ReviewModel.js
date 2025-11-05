@@ -63,6 +63,20 @@ const reviewSchema = new mongoose.Schema(
       ],
       default: []
     }
+    ,
+    // Moderation actions performed by admins: hide/unhide with reason and moderator id
+    moderation: {
+      type: [
+        {
+          moderatedAt: { type: Date },
+          moderatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          action: { type: String, enum: ['hide', 'unhide'] },
+          reason: { type: String },
+          correlationId: { type: String }
+        }
+      ],
+      default: []
+    }
   },
   {
     timestamps: true,

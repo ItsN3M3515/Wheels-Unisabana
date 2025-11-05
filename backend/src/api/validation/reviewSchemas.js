@@ -29,4 +29,13 @@ const reportReviewBodySchema = Joi.object({
   })
 }).options({ abortEarly: false });
 
-module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema, reportReviewBodySchema };
+// Admin visibility action schema
+const adminVisibilityBodySchema = Joi.object({
+  action: Joi.string().valid('hide', 'unhide').required(),
+  reason: Joi.string().trim().max(500).required().messages({
+    'any.required': 'Reason is required for moderation actions',
+    'string.max': 'Reason cannot exceed 500 characters'
+  })
+}).options({ abortEarly: false });
+
+module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema, reportReviewBodySchema, adminVisibilityBodySchema };

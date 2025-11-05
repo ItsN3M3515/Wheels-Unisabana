@@ -324,6 +324,66 @@ class ReviewController {
       next(err);
     }
   }
+
+  /**
+   * Admin endpoint: PATCH /admin/reviews/:reviewId/visibility
+   * Body: { action: 'hide'|'unhide', reason }
+   * Records moderation entry and recomputes aggregates transactionally.
+   */
+  async adminSetVisibility(req, res, next) {
+    const session = await mongoose.startSession();
+    try {
+      const { reviewId } = req.params;
+      const { action, reason } = req.body;
+      const moderatorId = req.user.sub;
+
+      const review = await ReviewModel.findById(reviewId).session(session);
+      if (!review) {
+        await session.endSession();
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      if (!['hide', 'unhide'].includes(action)) {
+        await session.endSession();
+        return res.status(400).json({ code: 'invalid_schema', message: 'Action must be hide or unhide', correlationId: req.correlationId });
+      }
+
+      // determine new visibility status
+      const newStatus = action === 'hide' ? 'hidden' : 'visible';
+
+      session.startTransaction();
+
+      // update review status and push moderation entry atomically
+      await ReviewModel.updateOne(
+        { _id: reviewId },
+        {
+          $set: { status: newStatus },
+          $push: {
+            moderation: {
+              moderatedAt: new Date(),
+              moderatorId,
+              action,
+              reason,
+              correlationId: req.correlationId
+            }
+          }
+        },
+        { session }
+      );
+
+      // recompute aggregates for affected driver inside transaction
+      await RatingAggregateService.recomputeAggregate(review.driverId, session);
+
+      await session.commitTransaction();
+      await session.endSession();
+
+      return res.status(200).json({ id: reviewId, visibility: newStatus });
+    } catch (err) {
+      try { await session.abortTransaction(); } catch (e) {}
+      await session.endSession();
+      next(err);
+    }
+  }
 }
 
 module.exports = ReviewController;

@@ -264,4 +264,15 @@ router.patch(
   reviewController.adminUnhideReview.bind(reviewController)
 );
 
+// Admin batch endpoint: set visibility with reason
+router.patch(
+  '/admin/reviews/:reviewId/visibility',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').adminVisibilityBodySchema, 'body'),
+  reviewController.adminSetVisibility.bind(reviewController)
+);
+
 module.exports = router;
