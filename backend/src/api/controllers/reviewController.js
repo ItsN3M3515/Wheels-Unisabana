@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 const ReviewModel = require('../../infrastructure/database/models/ReviewModel');
 const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
 const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
+const RatingAggregateService = require('../../domain/services/ratingAggregateService');
 
 class ReviewController {
   async createReview(req, res, next) {
@@ -129,6 +131,92 @@ class ReviewController {
 
       return res.status(200).json(response);
     } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * GET /passengers/trips/:tripId/reviews/me
+   * Return the caller's own review for the trip if present (visible or hidden allowed).
+   */
+  async getMyReviewForTrip(req, res, next) {
+    try {
+      const { tripId } = req.params;
+      const passengerId = req.user.sub;
+
+      const review = await ReviewModel.findOne({ tripId, passengerId }).lean();
+      if (!review) {
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      // compute lock/close window (24 hours from creation)
+      const createdAt = review.createdAt || review._id.getTimestamp?.();
+      const lockMs = 24 * 60 * 60 * 1000; // 24 hours
+      const lockedAt = createdAt ? new Date(new Date(createdAt).getTime() + lockMs) : null;
+
+      return res.status(200).json({
+        id: review._id.toString(),
+        rating: review.rating,
+        text: review.text,
+        tags: review.tags || [],
+        createdAt: review.createdAt,
+        lockedAt
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * DELETE /passengers/trips/:tripId/reviews/:reviewId
+   * Soft-delete (hidden) allowed only within 24h window by owner. Updates aggregates transactionally.
+   */
+  async deleteMyReview(req, res, next) {
+    const session = await mongoose.startSession();
+    try {
+      const { tripId, reviewId } = req.params;
+      const passengerId = req.user.sub;
+
+      // Ensure review exists and belongs to caller
+      const review = await ReviewModel.findOne({ _id: reviewId, tripId }).session(session);
+      if (!review) {
+        await session.endSession();
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      if (String(review.passengerId) !== String(passengerId)) {
+        await session.endSession();
+        return res.status(403).json({ code: 'forbidden_owner', message: 'You are not the author', correlationId: req.correlationId });
+      }
+
+      const createdAt = review.createdAt;
+      const lockMs = 24 * 60 * 60 * 1000; // 24 hours
+      const windowClose = new Date(new Date(createdAt).getTime() + lockMs);
+      const now = new Date();
+      if (now > windowClose) {
+        await session.endSession();
+        return res.status(400).json({ code: 'review_locked', message: 'Delete window has closed', correlationId: req.correlationId });
+      }
+
+      // Perform soft-delete and recompute aggregates in a transaction
+      session.startTransaction();
+
+      await ReviewModel.updateOne({ _id: reviewId }, { $set: { status: 'hidden' } }, { session });
+
+      // Recompute aggregate for affected driver within same session
+      await RatingAggregateService.recomputeAggregate(review.driverId, session);
+
+      await session.commitTransaction();
+      await session.endSession();
+
+      return res.status(200).json({ deleted: true });
+    } catch (err) {
+      try {
+        await session.abortTransaction();
+      } catch (e) {
+        // ignore
+      }
+      await session.endSession();
       next(err);
     }
   }

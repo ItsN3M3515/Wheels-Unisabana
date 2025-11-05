@@ -11,4 +11,15 @@ const listReviewsQuerySchema = Joi.object({
   pageSize: Joi.number().integer().min(1).max(50).default(10)
 });
 
-module.exports = { createReviewBodySchema, listReviewsQuerySchema };
+// Schema for reviewId parameter (MongoDB ObjectId)
+const reviewIdParamSchema = Joi.object({
+  reviewId: Joi.string()
+    .pattern(/^[a-f\d]{24}$/i)
+    .required()
+    .messages({
+      'string.pattern.base': 'reviewId must be a valid MongoDB ObjectId',
+      'any.required': 'reviewId is required'
+    })
+}).options({ abortEarly: false });
+
+module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema };
