@@ -105,6 +105,33 @@ class ReviewController {
       next(err);
     }
   }
+
+  async getDriverRatings(req, res, next) {
+    try {
+      const { driverId } = req.params;
+      const UserModel = require('../../infrastructure/database/models/UserModel');
+      const driver = await UserModel.findById(driverId).lean();
+      if (!driver) {
+        return res.status(404).json({ code: 'not_found', message: 'Driver not found', correlationId: req.correlationId });
+      }
+
+      const RatingAggregateService = require('../../domain/services/ratingAggregateService');
+      const agg = await RatingAggregateService.getAggregate(driverId);
+
+      // Ensure consistent response shape
+      const response = {
+        driverId: String(driverId),
+        avgRating: agg?.avgRating || 0,
+        count: agg?.count || 0,
+        histogram: agg?.histogram || { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+        updatedAt: agg?.updatedAt || new Date()
+      };
+
+      return res.status(200).json(response);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = ReviewController;

@@ -333,6 +333,12 @@ router.get(
   reviewController.listReviewsForDriver.bind(reviewController)
 );
 
+// GET /drivers/:driverId/ratings (public)
+router.get(
+  '/:driverId/ratings',
+  reviewController.getDriverRatings.bind(reviewController)
+);
+
 /**
  * POST /drivers/verification
  * Driver submits verification documents
