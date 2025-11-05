@@ -809,9 +809,19 @@ router.delete(
   authenticate,
   requireRole('passenger'),
   requireCsrf,
-  validateRequest(require('../validation/bookingRequestSchemas').tripIdParamSchema, 'params'),
-  validateRequest(reviewIdParamSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').reviewParamsSchema, 'params'),
   reviewController.deleteMyReview.bind(reviewController)
+);
+
+// PATCH edit my review within 24h
+router.patch(
+  '/trips/:tripId/reviews/:reviewId',
+  authenticate,
+  requireRole('passenger'),
+  requireCsrf,
+  validateRequest(require('../validation/reviewSchemas').reviewParamsSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').updateReviewBodySchema, 'body'),
+  reviewController.editMyReview.bind(reviewController)
 );
 
 module.exports = router;

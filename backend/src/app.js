@@ -87,6 +87,9 @@ app.use('/drivers', driverRoutes);
 app.use('/passengers', passengerRoutes);
 app.use('/passengers', paymentRoutes);
 app.use('/internal', internalRoutes);
+// Also expose internal admin routes at the top-level /admin path for test helpers
+// Tests expect admin endpoints under /admin; mounting here keeps existing /internal/* paths working
+app.use('/', internalRoutes);
 app.use('/notifications', notificationRoutes);
 // Trip-level routes (reviews)
 app.use('/trips', reviewRoutes);

@@ -11,6 +11,12 @@ const listReviewsQuerySchema = Joi.object({
   pageSize: Joi.number().integer().min(1).max(50).default(10)
 });
 
+const updateReviewBodySchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).optional(),
+  text: Joi.string().max(1000).optional().allow(''),
+  tags: Joi.array().items(Joi.string().max(50)).max(5).optional()
+}).options({ abortEarly: false });
+
 // Schema for reviewId parameter (MongoDB ObjectId)
 const reviewIdParamSchema = Joi.object({
   reviewId: Joi.string()
@@ -20,6 +26,11 @@ const reviewIdParamSchema = Joi.object({
       'string.pattern.base': 'reviewId must be a valid MongoDB ObjectId',
       'any.required': 'reviewId is required'
     })
+}).options({ abortEarly: false });
+
+const reviewParamsSchema = Joi.object({
+  tripId: Joi.string().pattern(/^[a-f\d]{24}$/i).required().messages({ 'string.pattern.base': 'tripId must be a valid MongoDB ObjectId' }),
+  reviewId: Joi.string().pattern(/^[a-f\d]{24}$/i).required().messages({ 'string.pattern.base': 'reviewId must be a valid MongoDB ObjectId' })
 }).options({ abortEarly: false });
 
 const reportReviewBodySchema = Joi.object({
@@ -38,4 +49,4 @@ const adminVisibilityBodySchema = Joi.object({
   })
 }).options({ abortEarly: false });
 
-module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema, reportReviewBodySchema, adminVisibilityBodySchema };
+module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema, reportReviewBodySchema, adminVisibilityBodySchema, updateReviewBodySchema, reviewParamsSchema };
