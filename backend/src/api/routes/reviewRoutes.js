@@ -20,4 +20,14 @@ router.post(
   controller.createReview.bind(controller)
 );
 
+// Report a review: POST /reviews/:reviewId/report
+router.post(
+  '/reviews/:reviewId/report',
+  authenticate,
+  requireCsrf,
+  validateRequest(require('../validation/reviewSchemas').reviewIdParamSchema, 'params'),
+  validateRequest(require('../validation/reviewSchemas').reportReviewBodySchema, 'body'),
+  controller.reportReview.bind(controller)
+);
+
 module.exports = router;

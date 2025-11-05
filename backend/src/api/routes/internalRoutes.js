@@ -241,4 +241,27 @@ router.patch(
   internalController.reviewDriverVerification.bind(internalController)
 );
 
+// Admin review moderation: hide/unhide reviews
+const ReviewController = require('../controllers/reviewController');
+const reviewController = new ReviewController();
+const { reviewIdParamSchema } = require('../validation/reviewSchemas');
+
+router.patch(
+  '/admin/reviews/:reviewId/hide',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  reviewController.adminHideReview.bind(reviewController)
+);
+
+router.patch(
+  '/admin/reviews/:reviewId/unhide',
+  authenticate,
+  requireRole('admin'),
+  requireCsrf,
+  validateRequest(reviewIdParamSchema, 'params'),
+  reviewController.adminUnhideReview.bind(reviewController)
+);
+
 module.exports = router;

@@ -3,6 +3,8 @@ const ReviewModel = require('../../infrastructure/database/models/ReviewModel');
 const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
 const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
 const RatingAggregateService = require('../../domain/services/ratingAggregateService');
+const ReviewReportModel = require('../../infrastructure/database/models/ReviewReportModel');
+const ReviewReportCounterModel = require('../../infrastructure/database/models/ReviewReportCounterModel');
 
 class ReviewController {
   async createReview(req, res, next) {
@@ -216,6 +218,108 @@ class ReviewController {
       } catch (e) {
         // ignore
       }
+      await session.endSession();
+      next(err);
+    }
+  }
+
+  /**
+   * POST /reviews/:reviewId/report
+   * Any authenticated user may report a review. Creates a report record and marks review as 'flagged'.
+   */
+  async reportReview(req, res, next) {
+    try {
+      const { reviewId } = req.params;
+      const reporterId = req.user.sub;
+      const { category, reason = '' } = req.body;
+
+      const review = await ReviewModel.findById(reviewId).lean();
+      if (!review) {
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      // Rate-limit / deduplicate: one report per reporter per review
+      const existing = await ReviewReportModel.findOne({ reviewId, reporterId });
+      if (existing) {
+        return res.status(429).json({ code: 'rate_limited', message: 'You have already reported this review recently', correlationId: req.correlationId });
+      }
+
+      // Create report and include correlationId for audit
+      const report = await ReviewReportModel.create({ reviewId, reporterId, category, reason, correlationId: req.correlationId });
+
+      // Atomically increment per-(review,category) counter
+      const counter = await ReviewReportCounterModel.findOneAndUpdate(
+        { reviewId, category },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      ).lean();
+
+      // Mark review as flagged to surface to moderation
+      await ReviewModel.updateOne({ _id: reviewId }, { $set: { status: 'flagged' } });
+
+      return res.status(201).json({ ok: true, category, reports: counter.count });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Admin: hide a review (PATCH /admin/reviews/:reviewId/hide)
+   * Transactionally hide and recompute aggregates.
+   */
+  async adminHideReview(req, res, next) {
+    const session = await mongoose.startSession();
+    try {
+      const { reviewId } = req.params;
+
+      const review = await ReviewModel.findById(reviewId).session(session);
+      if (!review) {
+        await session.endSession();
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      session.startTransaction();
+
+      await ReviewModel.updateOne({ _id: reviewId }, { $set: { status: 'hidden' } }, { session });
+      await RatingAggregateService.recomputeAggregate(review.driverId, session);
+
+      await session.commitTransaction();
+      await session.endSession();
+
+      return res.status(200).json({ id: reviewId, status: 'hidden' });
+    } catch (err) {
+      try { await session.abortTransaction(); } catch (e) {}
+      await session.endSession();
+      next(err);
+    }
+  }
+
+  /**
+   * Admin: unhide a review (PATCH /admin/reviews/:reviewId/unhide)
+   * Transactionally set status to visible and recompute aggregates.
+   */
+  async adminUnhideReview(req, res, next) {
+    const session = await mongoose.startSession();
+    try {
+      const { reviewId } = req.params;
+
+      const review = await ReviewModel.findById(reviewId).session(session);
+      if (!review) {
+        await session.endSession();
+        return res.status(404).json({ code: 'not_found', message: 'Review not found', correlationId: req.correlationId });
+      }
+
+      session.startTransaction();
+
+      await ReviewModel.updateOne({ _id: reviewId }, { $set: { status: 'visible' } }, { session });
+      await RatingAggregateService.recomputeAggregate(review.driverId, session);
+
+      await session.commitTransaction();
+      await session.endSession();
+
+      return res.status(200).json({ id: reviewId, status: 'visible' });
+    } catch (err) {
+      try { await session.abortTransaction(); } catch (e) {}
       await session.endSession();
       next(err);
     }

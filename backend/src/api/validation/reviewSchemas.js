@@ -22,4 +22,11 @@ const reviewIdParamSchema = Joi.object({
     })
 }).options({ abortEarly: false });
 
-module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema };
+const reportReviewBodySchema = Joi.object({
+  category: Joi.string().valid('abuse', 'spam', 'fraud', 'other').required(),
+  reason: Joi.string().trim().max(500).optional().allow('').messages({
+    'string.max': 'Reason cannot exceed 500 characters'
+  })
+}).options({ abortEarly: false });
+
+module.exports = { createReviewBodySchema, listReviewsQuerySchema, reviewIdParamSchema, reportReviewBodySchema };
