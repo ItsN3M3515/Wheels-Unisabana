@@ -1,6 +1,7 @@
 const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
 const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
 const UserModel = require('../../infrastructure/database/models/UserModel');
+const AuditService = require('../../domain/services/AuditService');
 
 // Helper: mask email like a***@domain.com
 function maskEmail(email) {
@@ -119,7 +120,7 @@ async function listUsers(req, res, next) {
   }
 }
 
-module.exports = { listUsers };
+// Exports consolidated at end of file
 
 /**
  * Admin: List trips with filters, pagination and capacity snapshot
@@ -280,7 +281,7 @@ async function listTrips(req, res, next) {
   }
 }
 
-module.exports = { listUsers, listTrips };
+// Exports consolidated at end of file
 
 // Helper: mask name like J*** D***
 function maskName(firstName, lastName) {
@@ -395,7 +396,73 @@ async function listBookings(req, res, next) {
   }
 }
 
-module.exports = { listUsers, listTrips, listBookings };
+// Exports consolidated at end of file
+
+/**
+ * PATCH /admin/users/:id/suspension
+ * Body: { action: 'suspend'|'unsuspend', reason: string }
+ */
+async function suspendUser(req, res, next) {
+  try {
+    const userId = req.params.id;
+    const { action, reason } = req.body || {};
+
+    if (!action || !['suspend', 'unsuspend'].includes(action) || !reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Missing or invalid action/reason', correlationId: req.correlationId });
+    }
+
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({ code: 'not_found', message: 'User not found', correlationId: req.correlationId });
+    }
+
+    const adminId = req.user && req.user.id ? req.user.id : null;
+
+    if (action === 'suspend') {
+      // Idempotent: if already suspended, return current state
+      if (user.suspended) {
+        // Still create an audit entry for the admin attempt
+        await AuditService.recordAdminAction({ action: 'suspend_attempt', entity: 'User', entityId: userId, who: adminId, before: { suspended: true }, after: { suspended: true }, why: reason, req });
+        return res.json({ userId: userId.toString(), status: 'suspended', suspendedAt: user.suspendedAt ? new Date(user.suspendedAt).toISOString() : new Date().toISOString(), by: adminId });
+      }
+
+      const before = { suspended: !!user.suspended, suspendedAt: user.suspendedAt, suspensionReason: user.suspensionReason };
+      user.suspended = true;
+      user.suspendedAt = new Date();
+      user.suspendedBy = adminId;
+      user.suspensionReason = reason;
+      await user.save();
+
+      const after = { suspended: user.suspended, suspendedAt: user.suspendedAt, suspensionReason: user.suspensionReason };
+      await AuditService.recordAdminAction({ action: 'suspend', entity: 'User', entityId: userId, who: adminId, before, after, why: reason, req });
+
+      return res.json({ userId: userId.toString(), status: 'suspended', suspendedAt: user.suspendedAt.toISOString(), by: adminId });
+    }
+
+    // unsuspend
+    if (!user.suspended) {
+      // idempotent no-op
+      await AuditService.recordAdminAction({ action: 'unsuspend_attempt', entity: 'User', entityId: userId, who: adminId, before: { suspended: false }, after: { suspended: false }, why: reason, req });
+      return res.json({ userId: userId.toString(), status: 'active', by: adminId });
+    }
+
+    const beforeU = { suspended: true, suspendedAt: user.suspendedAt, suspensionReason: user.suspensionReason };
+    user.suspended = false;
+    user.suspendedAt = null;
+    user.suspendedBy = adminId;
+    user.suspensionReason = '';
+    await user.save();
+    const afterU = { suspended: false, suspendedAt: null, suspensionReason: '' };
+    await AuditService.recordAdminAction({ action: 'unsuspend', entity: 'User', entityId: userId, who: adminId, before: beforeU, after: afterU, why: reason, req });
+
+    return res.json({ userId: userId.toString(), status: 'active', by: adminId });
+
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.suspendUser = suspendUser;
 
 /**
  * Admin: List refunds with filters and pagination
@@ -620,4 +687,4 @@ async function listRefunds(req, res, next) {
  *                   type: string
  */
 
-module.exports = { listUsers, listTrips, listBookings, listRefunds };
+module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser };

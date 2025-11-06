@@ -37,8 +37,14 @@ const listRefundsQuery = Joi.object({
   createdTo: Joi.date().iso().optional()
 }).concat(paginationQuery).options({ abortEarly: false, stripUnknown: true });
 
+const suspendUserSchema = Joi.object({
+  action: Joi.string().valid('suspend', 'unsuspend').required(),
+  reason: Joi.string().min(3).max(500).required()
+}).options({ abortEarly: false, stripUnknown: true });
+
 module.exports = {
   listTripsQuery,
   listBookingsQuery,
   listRefundsQuery
+  ,suspendUserSchema
 };

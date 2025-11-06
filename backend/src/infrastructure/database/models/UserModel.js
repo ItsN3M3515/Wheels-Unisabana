@@ -51,6 +51,27 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  // Suspension fields for admin actions (US-8.2.1)
+  suspended: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  suspendedAt: {
+    type: Date,
+    default: null
+  },
+  suspendedBy: {
+    // Store admin identifier as string (can be objectId or external id)
+    type: String,
+    default: null
+  },
+  suspensionReason: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Suspension reason cannot exceed 500 characters'],
+    default: ''
+  },
   // Password reset fields
   resetPasswordToken: {
     type: String,

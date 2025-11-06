@@ -4,7 +4,7 @@ const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
 const adminController = require('../controllers/adminController');
 const validateRequest = require('../middlewares/validateRequest');
-const { listTripsQuery, listBookingsQuery, listRefundsQuery } = require('../validation/adminSchemas');
+const { listTripsQuery, listBookingsQuery, listRefundsQuery, suspendUserSchema } = require('../validation/adminSchemas');
 
 // GET /admin/users
 router.get('/users', authenticate, requireRole(['admin']), adminController.listUsers);
@@ -20,5 +20,8 @@ router.get('/bookings', authenticate, requireRole(['admin']), validateRequest(li
 // GET /admin/refunds
 // GET /admin/refunds
 router.get('/refunds', authenticate, requireRole(['admin']), validateRequest(listRefundsQuery, 'query'), adminController.listRefunds);
+
+// PATCH /admin/users/:id/suspension
+router.patch('/users/:id/suspension', authenticate, requireRole(['admin']), validateRequest(suspendUserSchema, 'body'), adminController.suspendUser);
 
 module.exports = router;
