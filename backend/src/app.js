@@ -7,6 +7,7 @@ const path = require('path');
 
 // Middlewares personalizados
 const correlationId = require('./api/middlewares/correlationId');
+const requestContext = require('./api/middlewares/requestContext');
 const errorHandler = require('./api/middlewares/errorHandler');
 const { generalRateLimiter } = require('./api/middlewares/rateLimiter');
 const { serveSwagger } = require('./api/middlewares/swagger');
@@ -45,6 +46,8 @@ app.use(cors({
 app.use(morgan('combined'));
 app.use(cookieParser());
 app.use(correlationId);
+// Add request context (request id, actor resolution) before structured logging so logs include actor/correlation
+app.use(requestContext);
 app.use(structuredLogger); // Structured logging with PII redaction
 app.use(auditMiddleware);
 app.use(generalRateLimiter);
