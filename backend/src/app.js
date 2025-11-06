@@ -16,7 +16,6 @@ const { structuredLogger } = require('./api/middlewares/structuredLogger');
 const userRoutes = require('./api/routes/userRoutes');
 const authRoutes = require('./api/routes/authRoutes');
 const vehicleRoutes = require('./api/routes/vehicleRoutes');
-const webhookRoutes = require('./api/routes/webhookRoutes');
 const notificationWebhookRoutes = require('./api/routes/notificationWebhookRoutes');
 
 const app = express();
@@ -48,9 +47,6 @@ app.use(correlationId);
 app.use(structuredLogger); // Structured logging with PII redaction
 app.use(generalRateLimiter);
 
-// CRITICAL: Webhook routes MUST be mounted BEFORE express.json()
-// Stripe signature verification requires raw body buffer
-app.use('/payments', webhookRoutes);
 // Mount email notification webhooks BEFORE body parsing so raw body is available
 app.use('/notifications/webhooks', notificationWebhookRoutes);
 
@@ -76,7 +72,6 @@ const tripOfferRoutes = require('./api/routes/tripOfferRoutes');
 const passengerRoutes = require('./api/routes/passengerRoutes');
 const driverRoutes = require('./api/routes/driverRoutes');
 const internalRoutes = require('./api/routes/internalRoutes');
-const paymentRoutes = require('./api/routes/paymentRoutes');
 const notificationRoutes = require('./api/routes/notificationRoutes');
 const reviewRoutes = require('./api/routes/reviewRoutes');
 app.use('/api/users', userRoutes);
@@ -85,7 +80,6 @@ app.use('/api/drivers', vehicleRoutes);
 app.use('/drivers', tripOfferRoutes);
 app.use('/drivers', driverRoutes);
 app.use('/passengers', passengerRoutes);
-app.use('/passengers', paymentRoutes);
 app.use('/internal', internalRoutes);
 // Also expose internal admin routes at the top-level /admin path for test helpers
 // Tests expect admin endpoints under /admin; mounting here keeps existing /internal/* paths working

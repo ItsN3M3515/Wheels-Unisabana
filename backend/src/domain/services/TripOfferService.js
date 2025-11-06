@@ -419,6 +419,10 @@ class TripOfferService {
     }
 
     // 5. Query all bookings for cascade (outside transaction for efficiency)
+    console.log(
+      `[TripOfferService] Querying bookings for cascade | tripId: ${tripId} | type: ${typeof tripId}`
+    );
+    
     const [pendingBookings, acceptedBookings] = await Promise.all([
       bookingRequestRepository.findAllPendingByTrip(tripId),
       bookingRequestRepository.findAllAcceptedByTrip(tripId)
@@ -427,6 +431,24 @@ class TripOfferService {
     console.log(
       `[TripOfferService] Found bookings for cascade | tripId: ${tripId} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
     );
+    
+    // Debug: Log booking details
+    if (pendingBookings.length > 0) {
+      console.log(`[TripOfferService] Pending bookings:`, pendingBookings.map(b => ({
+        id: b.id,
+        passengerId: b.passengerId,
+        tripId: b.tripId,
+        status: b.status
+      })));
+    }
+    if (acceptedBookings.length > 0) {
+      console.log(`[TripOfferService] Accepted bookings:`, acceptedBookings.map(b => ({
+        id: b.id,
+        passengerId: b.passengerId,
+        tripId: b.tripId,
+        status: b.status
+      })));
+    }
 
     // 6. Execute cascade transaction
     const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
@@ -494,6 +516,61 @@ class TripOfferService {
       console.log(
         `[TripOfferService] Cascade completed | tripId: ${tripId} | effects: ${JSON.stringify(effects)}`
       );
+
+      // Notify all affected passengers (pending + accepted)
+      const NotificationService = require('./NotificationService');
+      
+      // Extract passenger IDs (they're already strings from _toDomain conversion)
+      const allPassengerIds = [
+        ...pendingBookings.map(b => {
+          const pid = b.passengerId?.toString ? b.passengerId.toString() : String(b.passengerId);
+          console.log(`[TripOfferService] Pending booking passengerId: ${pid} (type: ${typeof b.passengerId})`);
+          return pid;
+        }),
+        ...acceptedBookings.map(b => {
+          const pid = b.passengerId?.toString ? b.passengerId.toString() : String(b.passengerId);
+          console.log(`[TripOfferService] Accepted booking passengerId: ${pid} (type: ${typeof b.passengerId})`);
+          return pid;
+        })
+      ].filter(Boolean); // Remove any null/undefined values
+
+      console.log(
+        `[TripOfferService] Preparing notifications | tripId: ${tripId} | total passengerIds: ${allPassengerIds.length} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
+      );
+
+      if (allPassengerIds.length > 0) {
+        // Remove duplicates
+        const uniquePassengerIds = [...new Set(allPassengerIds)];
+        console.log(
+          `[TripOfferService] Creating notifications for ${uniquePassengerIds.length} unique passengers | tripId: ${tripId}`
+        );
+        
+        try {
+          const createdCount = await NotificationService.createNotifications(
+            uniquePassengerIds,
+            'trip.canceled',
+            'Viaje cancelado',
+            `El viaje ha sido cancelado por el conductor.`,
+            {
+              tripId: tripId,
+              driverId: driverId
+            }
+          );
+          console.log(
+            `[TripOfferService] Notifications created | tripId: ${tripId} | count: ${createdCount}`
+          );
+        } catch (error) {
+          console.error(
+            `[TripOfferService] Failed to create notifications | tripId: ${tripId}`,
+            error.message,
+            error.stack
+          );
+        }
+      } else {
+        console.log(
+          `[TripOfferService] No passengers to notify | tripId: ${tripId} | pending: ${pendingBookings.length} | accepted: ${acceptedBookings.length}`
+        );
+      }
 
       return {
         tripId,

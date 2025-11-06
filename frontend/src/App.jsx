@@ -15,8 +15,7 @@ import MyVehicle from './pages/driver/MyVehicle';
 import CreateTripOffer from './pages/driver/CreateTripOffer';
 import TripDetails from './pages/driver/TripDetails';
 import BookingRequests from './pages/driver/BookingRequests';
-import PaymentPage from './pages/payments/PaymentPage';
-import TransactionsPage from './pages/payments/TransactionsPage';
+import CreateReview from './pages/reviews/CreateReview';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -52,7 +51,7 @@ function MyTripsRouter() {
 
 export default function App() {
   return (
-    <Router>
+    <Router future={{ v7_relativeSplatPath: true }}>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<HomePage />} />
@@ -151,20 +150,12 @@ export default function App() {
           } 
         />
 
-        {/* Payment routes (passenger only) */}
+        {/* Review routes */}
         <Route 
-          path="/payment/:bookingId" 
+          path="/trips/:tripId/review" 
           element={
             <ProtectedRoute requiredRole="passenger">
-              <PaymentPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/transactions" 
-          element={
-            <ProtectedRoute requiredRole="passenger">
-              <TransactionsPage />
+              <CreateReview />
             </ProtectedRoute>
           } 
         />

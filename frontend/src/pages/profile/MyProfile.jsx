@@ -281,8 +281,9 @@ export default function MyProfile() {
             {/* Role indicator */}
             <div style={{
               padding: '6px 16px',
-              backgroundColor: isDriver ? '#032567' : '#f0f9ff',
+              backgroundColor: isDriver ? '#032567' : 'white',
               color: isDriver ? 'white' : '#032567',
+              border: '2px solid #032567',
               borderRadius: '20px',
               fontSize: '0.9rem',
               fontWeight: '500',

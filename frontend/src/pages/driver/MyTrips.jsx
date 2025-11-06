@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import { getMyTripOffers, cancelTripOffer } from '../../api/tripOffer';
-import TripProgressButton from '../../components/payments/TripProgressButton';
+import NotificationBell from '../../components/notifications/NotificationBell';
 import logo from '../../assets/images/UniSabana Logo.png';
 
 export default function MyTrips() {
@@ -288,17 +288,23 @@ export default function MyTrips() {
             </Link>
           </nav>
 
-          {/* Right: Role Status + Profile */}
+          {/* Right: Notifications + Role Status + Profile */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '16px'
           }}>
+            {/* Notifications */}
+            {user && (
+              <NotificationBell />
+            )}
+
             {/* Role indicator */}
             <div style={{
               padding: '6px 16px',
-              backgroundColor: '#fef3c7',
-              color: '#92400e',
+              backgroundColor: '#032567',
+              color: 'white',
+              border: '2px solid #032567',
               borderRadius: '20px',
               fontSize: '0.9rem',
               fontWeight: '500',
@@ -758,19 +764,6 @@ export default function MyTrips() {
                     gap: '12px',
                     marginLeft: '24px'
                   }}>
-                    {/* Trip Progress Button - Only for trips currently in progress */}
-                    {trip.status === 'published' && (
-                      <TripProgressButton
-                        trip={trip}
-                        onStatusChange={(trip, status, paymentStatus) => {
-                          console.log('Trip status changed:', status, paymentStatus);
-                          // Reload trips when status changes to completed
-                          if (status === 'completed') {
-                            loadTrips();
-                          }
-                        }}
-                      />
-                    )}
                     
                     <button
                       onClick={() => navigate(`/driver/trips/${trip.id}`)}

@@ -271,6 +271,47 @@ const searchTripsQuerySchema = Joi.object({
       'date.format': 'toDate must be a valid ISO 8601 date',
       'date.base': 'toDate must be a valid date'
     }),
+  fromTime: Joi.string()
+    .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'fromTime must be in HH:MM format (24-hour)'
+    }),
+  toTime: Joi.string()
+    .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .optional()
+    .messages({
+      'string.pattern.base': 'toTime must be in HH:MM format (24-hour)'
+    }),
+  minAvailableSeats: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.base': 'minAvailableSeats must be a number',
+      'number.integer': 'minAvailableSeats must be an integer',
+      'number.min': 'minAvailableSeats must be at least 1'
+    }),
+  minPrice: Joi.number()
+    .min(0)
+    .optional()
+    .messages({
+      'number.base': 'minPrice must be a number',
+      'number.min': 'minPrice must be at least 0'
+    }),
+  maxPrice: Joi.number()
+    .min(0)
+    .optional()
+    .when('minPrice', {
+      is: Joi.exist(),
+      then: Joi.number().min(Joi.ref('minPrice')).messages({
+        'number.min': 'maxPrice must be greater than or equal to minPrice'
+      })
+    })
+    .messages({
+      'number.base': 'maxPrice must be a number',
+      'number.min': 'maxPrice must be at least 0'
+    }),
   page: Joi.number()
     .integer()
     .min(1)

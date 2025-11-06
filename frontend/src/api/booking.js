@@ -15,9 +15,11 @@ import client from './client';
  * @returns {Promise<Object>} - {items, page, pageSize, total, totalPages}
  */
 export async function getMyBookings(filters = {}) {
+  console.log('[getMyBookings] Making request to /passengers/bookings with filters:', filters);
   const response = await client.get('/passengers/bookings', {
     params: filters,
   });
+  console.log('[getMyBookings] Response received:', response.data);
   return response.data;
 }
 

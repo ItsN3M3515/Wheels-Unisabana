@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore';
 import { searchTrips } from '../api/trip';
 import { getMyTripOffers } from '../api/tripOffer';
 import logo from '../assets/images/UniSabana Logo.png';
+import NotificationBell from '../components/notifications/NotificationBell';
 
 /**
  * Dashboard - Main landing page for authenticated users
@@ -227,35 +228,44 @@ export default function Dashboard() {
               Reportes
             </Link>
             
-            <Link
-              to="/search"
-              style={{
-                fontSize: 'clamp(0.85rem, 2vw, 1rem)',
-                fontWeight: '500',
-                color: '#1c1917',
-                textDecoration: 'none',
-                transition: 'color 0.2s',
-                fontFamily: 'Inter, sans-serif',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={(e) => e.target.style.color = '#032567'}
-              onMouseLeave={(e) => e.target.style.color = '#1c1917'}
-            >
-              Buscar
-            </Link>
+            {/* Only show "Buscar" for passengers */}
+            {!isDriver && (
+              <Link
+                to="/search"
+                style={{
+                  fontSize: 'clamp(0.85rem, 2vw, 1rem)',
+                  fontWeight: '500',
+                  color: '#1c1917',
+                  textDecoration: 'none',
+                  transition: 'color 0.2s',
+                  fontFamily: 'Inter, sans-serif',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => e.target.style.color = '#032567'}
+                onMouseLeave={(e) => e.target.style.color = '#1c1917'}
+              >
+                Buscar
+              </Link>
+            )}
           </nav>
 
-          {/* Right: Role Status + Profile */}
+          {/* Right: Notifications + Role Status + Profile */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '16px'
           }}>
+            {/* Notifications */}
+            {user && (
+              <NotificationBell />
+            )}
+            
             {/* Role indicator */}
             <div style={{
               padding: '6px 16px',
-              backgroundColor: isDriver ? '#032567' : '#f0f9ff',
+              backgroundColor: isDriver ? '#032567' : 'white',
               color: isDriver ? 'white' : '#032567',
+              border: '2px solid #032567',
               borderRadius: '20px',
               fontSize: '0.9rem',
               fontWeight: '500',
@@ -389,7 +399,7 @@ export default function Dashboard() {
                       <button
                         onClick={() => {
                           setShowProfileMenu(false);
-                          navigate('/transactions');
+                          // Payment functionality removed
                         }}
                         style={{
                           width: '100%',

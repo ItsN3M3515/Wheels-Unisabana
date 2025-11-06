@@ -239,7 +239,38 @@ class TripOfferController {
       // Create DTO from request body
       const updateDto = UpdateTripOfferDto.fromRequest(req.body);
 
-      // Update via service (includes ownership and invariant checks)
+      // If canceling, use cascade cancellation to notify passengers
+      if (updateDto.status === 'canceled') {
+        console.log(
+          `[TripOfferController] Cancel detected in update, using cascade cancellation | tripId: ${id} | correlationId: ${req.correlationId}`
+        );
+        
+        // Initialize repositories for cascade cancellation
+        const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+        const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
+        const bookingRequestRepository = new MongoBookingRequestRepository();
+        const seatLedgerRepository = new MongoSeatLedgerRepository();
+
+        // Use cascade cancellation (includes notifications)
+        const result = await this.tripOfferService.cancelTripWithCascade(
+          id,
+          driverId,
+          bookingRequestRepository,
+          seatLedgerRepository
+        );
+
+        // Map to response format
+        const canceledTrip = await this.tripOfferService.getTripOfferById(id);
+        const responseDto = TripOfferResponseDto.fromDomain(canceledTrip);
+
+        console.log(
+          `[TripOfferController] Trip canceled with cascade | tripId: ${id} | effects: ${JSON.stringify(result.effects)} | correlationId: ${req.correlationId}`
+        );
+
+        return res.status(200).json(responseDto);
+      }
+
+      // Regular update (not canceling)
       const updatedTrip = await this.tripOfferService.updateTripOffer(id, driverId, updateDto);
 
       const responseDto = TripOfferResponseDto.fromDomain(updatedTrip);

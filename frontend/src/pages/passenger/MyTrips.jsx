@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import { getMyBookings, cancelBooking } from '../../api/booking';
+import { getMyReviewForTrip } from '../../api/review';
 import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
-import PaymentButton from '../../components/payments/PaymentButton';
 
 export default function MyTrips() {
   const navigate = useNavigate();
@@ -16,23 +16,136 @@ export default function MyTrips() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState('in-progress'); // 'in-progress', 'reserved', 'completed', 'canceled'
+  const [activeTab, setActiveTab] = useState('reserved'); // 'in-progress', 'reserved', 'completed', 'canceled'
+  const [reviewsMap, setReviewsMap] = useState({}); // Map of tripId -> review
 
   useEffect(() => {
+    console.log('[MyTrips] Component mounted, loading bookings...');
     loadBookings();
   }, []);
 
+  // Helper to check if trip is in the future
+  const isTripUpcoming = (departureDate) => {
+    return new Date(departureDate) > new Date();
+  };
+
+  // Helper to check if trip is in the past
+  const isTripPast = (departureDate) => {
+    return new Date(departureDate) < new Date();
+  };
+
+  // Categorize bookings
+  // En progreso: Viajes aceptados que ya iniciaron pero aún no terminaron
+  const inProgressBookings = bookings.filter(b => {
+    if (!b || !b.trip) return false;
+    if (b.status !== 'accepted') return false;
+    const now = new Date();
+    const departureAt = new Date(b.trip.departureAt);
+    const estimatedArrivalAt = b.trip.estimatedArrivalAt ? new Date(b.trip.estimatedArrivalAt) : null;
+    
+    // Ya inició (departureAt en el pasado) pero aún no terminó (estimatedArrivalAt en el futuro o no existe)
+    return departureAt <= now && (estimatedArrivalAt === null || estimatedArrivalAt > now);
+  });
+
+  // Reservados: Pendientes O aceptados que aún no han iniciado (departureAt en el futuro)
+  const reservedBookings = bookings.filter(b => {
+    if (!b) return false;
+    if (b.status === 'pending') return true;
+    if (b.status === 'accepted' && b.trip && isTripUpcoming(b.trip.departureAt)) return true;
+    return false;
+  });
+
+  // Completados: Viajes aceptados que ya terminaron completamente (estimatedArrivalAt en el pasado)
+  const completedBookings = bookings.filter(b => {
+    if (!b || !b.trip || !b.trip.estimatedArrivalAt) return false;
+    if (b.status !== 'accepted') return false;
+    return isTripPast(b.trip.estimatedArrivalAt);
+  });
+
+  const canceledBookings = bookings.filter(b => {
+    if (!b) return false;
+    return ['declined', 'canceled_by_passenger', 'canceled_by_platform', 'expired', 'declined_auto'].includes(b.status);
+  });
+
+  // Load reviews for completed trips
+  useEffect(() => {
+    const loadReviews = async () => {
+      const reviews = {};
+      for (const booking of completedBookings) {
+        try {
+          const review = await getMyReviewForTrip(booking.tripId);
+          reviews[booking.tripId] = review;
+        } catch (error) {
+          // Review doesn't exist yet, that's OK
+          if (error.status !== 404) {
+            console.error('Error loading review:', error);
+          }
+        }
+      }
+      setReviewsMap(reviews);
+    };
+
+    if (completedBookings.length > 0) {
+      loadReviews();
+    }
+  }, [completedBookings.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select first tab with bookings
+  useEffect(() => {
+    if (bookings.length > 0) {
+      // Don't change if current tab has content
+      const currentTabHasContent = 
+        (activeTab === 'reserved' && reservedBookings.length > 0) ||
+        (activeTab === 'in-progress' && inProgressBookings.length > 0) ||
+        (activeTab === 'completed' && completedBookings.length > 0) ||
+        (activeTab === 'canceled' && canceledBookings.length > 0);
+      
+      if (currentTabHasContent) return;
+      
+      // Switch to first tab with content
+      if (reservedBookings.length > 0) setActiveTab('reserved');
+      else if (inProgressBookings.length > 0) setActiveTab('in-progress');
+      else if (completedBookings.length > 0) setActiveTab('completed');
+      else if (canceledBookings.length > 0) setActiveTab('canceled');
+    }
+  }, [bookings.length, reservedBookings.length, inProgressBookings.length, completedBookings.length, canceledBookings.length, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadBookings = async () => {
     try {
+      console.log('[MyTrips] loadBookings called, making API request...');
       setLoading(true);
       setError(null);
       const data = await getMyBookings();
       console.log('[MyTrips] Bookings loaded:', data);
       console.log('[MyTrips] Bookings items:', data.items);
-      setBookings(data.items || []);
+      console.log('[MyTrips] Total bookings:', data.total);
+      
+      // Validate bookings structure
+      if (data.items && Array.isArray(data.items)) {
+        const validBookings = data.items.filter(booking => {
+          if (!booking) {
+            console.warn('[MyTrips] Null booking found');
+            return false;
+          }
+          if (!booking.trip) {
+            console.warn('[MyTrips] Booking without trip:', booking.id);
+            return false;
+          }
+          if (!booking.trip.origin || !booking.trip.destination) {
+            console.warn('[MyTrips] Booking with incomplete trip data:', booking.id, booking.trip);
+            return false;
+          }
+          return true;
+        });
+        console.log('[MyTrips] Valid bookings:', validBookings.length);
+        setBookings(validBookings);
+      } else {
+        console.warn('[MyTrips] Invalid data structure:', data);
+        setBookings([]);
+      }
     } catch (err) {
-      console.error('[MyTrips] Error:', err);
-      setError('Error al cargar tus viajes');
+      console.error('[MyTrips] Error loading bookings:', err);
+      setError(err.response?.data?.message || err.message || 'Error al cargar tus viajes');
     } finally {
       setLoading(false);
     }
@@ -87,26 +200,50 @@ export default function MyTrips() {
     }).format(price);
   };
 
-  const getStatusBadge = (status) => {
-    const badges = {
-      pending: { bg: '#e0f2fe', color: '#032567', text: 'Pendiente' },
-      accepted: { bg: '#e0f2fe', color: '#032567', text: 'Confirmado' },
-      declined: { bg: '#f5f5f4', color: '#57534e', text: 'Rechazado' },
-      canceled_by_passenger: { bg: '#f5f5f4', color: '#57534e', text: 'Cancelado' },
-      expired: { bg: '#f5f5f4', color: '#57534e', text: 'Expirado' },
-    };
-    const badge = badges[status] || badges.pending;
+  const getStatusBadge = (status, booking) => {
+    // Determine badge text based on status and active tab
+    let badgeText = '';
+    let badgeBg = '#e0f2fe';
+    let badgeColor = '#032567';
+
+    if (status === 'pending') {
+      badgeText = 'Pendiente';
+    } else if (status === 'accepted') {
+      // Show "En progreso" in the in-progress tab, "Confirmado" in reserved tab, or "Completado" in completed tab
+      if (activeTab === 'in-progress') {
+        badgeText = 'En progreso';
+      } else if (activeTab === 'completed') {
+        badgeText = 'Completado';
+      } else {
+        badgeText = 'Confirmado';
+      }
+    } else if (['declined', 'canceled_by_passenger', 'canceled_by_platform', 'expired', 'declined_auto'].includes(status)) {
+      badgeBg = '#f5f5f4';
+      badgeColor = '#57534e';
+      if (activeTab === 'canceled') {
+        badgeText = 'Cancelado';
+      } else if (status === 'declined') {
+        badgeText = 'Rechazado';
+      } else if (status === 'expired') {
+        badgeText = 'Expirado';
+      } else {
+        badgeText = 'Cancelado';
+      }
+    } else {
+      badgeText = 'Pendiente';
+    }
+
     return (
       <span style={{
         padding: '6px 16px',
         borderRadius: '20px',
         fontSize: '0.85rem',
         fontWeight: '500',
-        backgroundColor: badge.bg,
-        color: badge.color,
+        backgroundColor: badgeBg,
+        color: badgeColor,
         fontFamily: 'Inter, sans-serif'
       }}>
-        {badge.text}
+        {badgeText}
       </span>
     );
   };
@@ -115,48 +252,19 @@ export default function MyTrips() {
     return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
   };
 
-  // Helper to check if trip is in the future
-  const isTripUpcoming = (departureDate) => {
-    return new Date(departureDate) > new Date();
-  };
-
-  // Helper to check if trip is in the past
-  const isTripPast = (departureDate) => {
-    return new Date(departureDate) < new Date();
-  };
-
-  // Categorize bookings
-  const inProgressBookings = bookings.filter(b => 
-    b && b.trip && b.status === 'accepted' && isTripUpcoming(b.trip.departureAt)
-  );
-
-  const reservedBookings = bookings.filter(b => 
-    b && b.status === 'pending'
-  );
-
-  const completedBookings = bookings.filter(b => 
-    b && b.trip && b.status === 'accepted' && isTripPast(b.trip.departureAt)
-  );
-
-  const canceledBookings = bookings.filter(b => 
-    b && ['declined', 'canceled_by_passenger', 'expired'].includes(b.status)
-  );
-
   // Debug logs
   console.log('[MyTrips] Total bookings:', bookings.length);
   console.log('[MyTrips] All bookings:', bookings);
   bookings.forEach((b, i) => {
     console.log(`[MyTrips] Booking ${i}:`, {
-      id: b.id,
-      status: b.status,
-      hasTrip: !!b.trip,
-      tripId: b.tripId
+      id: b?.id,
+      status: b?.status,
+      hasTrip: !!b?.trip,
+      tripId: b?.tripId,
+      tripOrigin: b?.trip?.origin,
+      tripDestination: b?.trip?.destination
     });
   });
-  console.log('[MyTrips] Reserved bookings (pending):', reservedBookings);
-  console.log('[MyTrips] Reserved bookings length:', reservedBookings.length);
-  console.log('[MyTrips] Active tab:', activeTab);
-
   // Get count for each category
   const getCategoryCount = (category) => {
     switch(category) {
@@ -180,6 +288,14 @@ export default function MyTrips() {
   };
 
   const activeBookings = getActiveBookings();
+
+  // Debug logs
+  console.log('[MyTrips] In-progress bookings:', inProgressBookings.length);
+  console.log('[MyTrips] Reserved bookings (pending):', reservedBookings.length);
+  console.log('[MyTrips] Completed bookings:', completedBookings.length);
+  console.log('[MyTrips] Canceled bookings:', canceledBookings.length);
+  console.log('[MyTrips] Active tab:', activeTab);
+  console.log('[MyTrips] Active bookings for tab:', activeBookings.length);
 
   if (loading) {
     return (
@@ -325,8 +441,9 @@ export default function MyTrips() {
             {/* Role indicator */}
             <div style={{
               padding: '6px 16px',
-              backgroundColor: '#f0f9ff',
+              backgroundColor: 'white',
               color: '#032567',
+              border: '2px solid #032567',
               borderRadius: '20px',
               fontSize: '0.9rem',
               fontWeight: '500',
@@ -592,10 +709,12 @@ export default function MyTrips() {
               marginBottom: '8px',
               fontFamily: 'Inter, sans-serif'
             }}>
-              {activeTab === 'in-progress' && 'No tienes viajes en progreso'}
-              {activeTab === 'reserved' && 'No tienes viajes reservados'}
-              {activeTab === 'completed' && 'No tienes viajes completados'}
-              {activeTab === 'canceled' && 'No tienes viajes cancelados'}
+              {bookings.length === 0 
+                ? 'No tienes reservas aún' 
+                : activeTab === 'in-progress' && 'No tienes viajes en progreso'
+                || activeTab === 'reserved' && 'No tienes viajes reservados'
+                || activeTab === 'completed' && 'No tienes viajes completados'
+                || activeTab === 'canceled' && 'No tienes viajes cancelados'}
             </h3>
             <p style={{
               fontSize: '1rem',
@@ -603,8 +722,10 @@ export default function MyTrips() {
               marginBottom: '24px',
               fontFamily: 'Inter, sans-serif'
             }}>
-              {activeTab === 'reserved' && 'Busca viajes disponibles y solicita tu primera reserva'}
-              {activeTab !== 'reserved' && 'Los viajes aparecerán aquí cuando corresponda'}
+              {bookings.length === 0 
+                ? 'Busca viajes disponibles y solicita tu primera reserva'
+                : activeTab === 'reserved' && 'Busca viajes disponibles y solicita tu primera reserva'
+                || 'Los viajes aparecerán aquí cuando corresponda'}
             </p>
             {activeTab === 'reserved' && (
               <button
@@ -666,7 +787,7 @@ export default function MyTrips() {
                       }}>
                         {booking.trip.origin.text} → {booking.trip.destination.text}
                       </h3>
-                      {getStatusBadge(booking.status)}
+                      {getStatusBadge(booking.status, booking)}
                     </div>
                     <p style={{
                       fontSize: '0.95rem',
@@ -806,47 +927,15 @@ export default function MyTrips() {
                     borderRadius: '12px',
                     border: '1px solid #86efac'
                   }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '8px'
+                    <p style={{
+                      fontSize: '0.9rem',
+                      color: '#15803d',
+                      margin: 0,
+                      fontFamily: 'Inter, sans-serif',
+                      fontWeight: '500'
                     }}>
-                      <p style={{
-                        fontSize: '0.9rem',
-                        color: '#15803d',
-                        margin: 0,
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: '500'
-                      }}>
-                        Viaje confirmado. ¡Nos vemos pronto!
-                      </p>
-                      {!booking.isPaid && (
-                        <div style={{ marginLeft: '12px' }}>
-                          <PaymentButton 
-                            booking={booking}
-                            onPaymentSuccess={(paymentIntent, booking) => {
-                              // Update booking status in local state
-                              setBookings(prev => prev.map(b => 
-                                b.id === booking.id ? { ...b, isPaid: true } : b
-                              ));
-                            }}
-                            className="text-xs px-3 py-1"
-                          />
-                        </div>
-                      )}
-                    </div>
-                    {booking.isPaid && (
-                      <p style={{
-                        fontSize: '0.8rem',
-                        color: '#16a34a',
-                        margin: 0,
-                        fontFamily: 'Inter, sans-serif',
-                        fontWeight: '600'
-                      }}>
-                        ✅ Pago completado
-                      </p>
-                    )}
+                      Viaje confirmado. ¡Nos vemos pronto!
+                    </p>
                   </div>
                 )}
 
@@ -855,7 +944,10 @@ export default function MyTrips() {
                     padding: '12px 16px',
                     backgroundColor: '#eff6ff',
                     borderRadius: '12px',
-                    border: '1px solid #bfdbfe'
+                    border: '1px solid #bfdbfe',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}>
                     <p style={{
                       fontSize: '0.9rem',
@@ -865,6 +957,54 @@ export default function MyTrips() {
                     }}>
                       Viaje completado
                     </p>
+                    {reviewsMap[booking.tripId] ? (
+                      <button
+                        onClick={() => navigate(`/trips/${booking.tripId}/review`)}
+                        style={{
+                          padding: '6px 16px',
+                          fontSize: '0.9rem',
+                          fontWeight: 'normal',
+                          color: '#032567',
+                          backgroundColor: 'white',
+                          border: '2px solid #032567',
+                          borderRadius: '20px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.backgroundColor = '#f0f9ff';
+                          e.target.style.borderColor = '#1A6EFF';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = 'white';
+                          e.target.style.borderColor = '#032567';
+                        }}
+                      >
+                        Ver/Editar reseña
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/trips/${booking.tripId}/review`)}
+                        style={{
+                          padding: '6px 16px',
+                          fontSize: '0.9rem',
+                          fontWeight: 'normal',
+                          color: 'white',
+                          backgroundColor: '#032567',
+                          border: 'none',
+                          borderRadius: '20px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          fontFamily: 'Inter, sans-serif',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#1A6EFF'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#032567'}
+                      >
+                        Escribir reseña
+                      </button>
+                    )}
                   </div>
                 )}
 

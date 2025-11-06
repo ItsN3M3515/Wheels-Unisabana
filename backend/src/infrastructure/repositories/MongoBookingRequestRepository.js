@@ -30,7 +30,7 @@ class MongoBookingRequestRepository {
       declinedAt: obj.declinedAt,
       declinedBy: obj.declinedBy ? obj.declinedBy.toString() : null,
       canceledAt: obj.canceledAt,
-      isPaid: obj.isPaid || false, // US-4.1.5: Payment status
+      isPaid: false, // Payment functionality removed
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt
     });
@@ -141,13 +141,29 @@ class MongoBookingRequestRepository {
    * Find booking requests with populated trip data (for API responses)
    * @param {string} passengerId - Passenger ID
    * @param {Object} filters - Optional filters
+   * @param {string|string[]} filters.status - Status filter (single or array)
+   * @param {Date} filters.fromDate - Minimum createdAt date
+   * @param {Date} filters.toDate - Maximum createdAt date
+   * @param {number} filters.page - Page number (default: 1)
+   * @param {number} filters.limit - Results per page (default: 10)
    * @returns {Promise<Object>} Paginated results with Mongoose documents (with populated tripId)
    */
-  async findByPassengerWithTrip(passengerId, { status, page = 1, limit = 10 } = {}) {
+  async findByPassengerWithTrip(passengerId, { status, fromDate, toDate, page = 1, limit = 10 } = {}) {
     const query = { passengerId };
 
     if (status) {
       query.status = Array.isArray(status) ? { $in: status } : status;
+    }
+
+    // Date range filters
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) {
+        query.createdAt.$gte = fromDate;
+      }
+      if (toDate) {
+        query.createdAt.$lte = toDate;
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -169,6 +185,21 @@ class MongoBookingRequestRepository {
         .lean(),
       BookingRequestModel.countDocuments(query)
     ]);
+
+    console.log(`[MongoBookingRequestRepository] findByPassengerWithTrip | passengerId: ${passengerId} | query: ${JSON.stringify(query)} | found: ${docs.length} bookings | total: ${total}`);
+    
+    // Debug: Log first booking structure if exists
+    if (docs.length > 0) {
+      console.log(`[MongoBookingRequestRepository] First booking structure:`, {
+        id: docs[0]._id?.toString(),
+        tripId: docs[0].tripId?._id?.toString() || docs[0].tripId?.toString(),
+        tripIdType: typeof docs[0].tripId,
+        hasTrip: !!docs[0].tripId,
+        tripOrigin: docs[0].tripId?.origin,
+        tripDestination: docs[0].tripId?.destination,
+        tripDriver: docs[0].tripId?.driverId
+      });
+    }
 
     return {
       bookings: docs, // Return Mongoose docs with populated tripId
@@ -418,7 +449,7 @@ class MongoBookingRequestRepository {
         $set: {
           status: 'declined_auto',
           declinedAt: new Date(),
-          declinedBy: 'system',
+          declinedBy: null, // Auto-declined by system (no specific user)
           updatedAt: new Date()
         }
       },
@@ -482,28 +513,6 @@ class MongoBookingRequestRepository {
     return result.modifiedCount;
   }
 
-  /**
-   * Mark booking as paid (US-4.1.5)
-   * Updates isPaid flag when payment transaction succeeds
-   * Idempotent: Safe to call multiple times
-   * 
-   * @param {string} bookingId - Booking request ID
-   * @returns {Promise<BookingRequest|null>} Updated booking or null if not found
-   */
-  async markAsPaid(bookingId) {
-    const doc = await BookingRequestModel.findByIdAndUpdate(
-      bookingId,
-      {
-        $set: {
-          isPaid: true,
-          updatedAt: new Date()
-        }
-      },
-      { new: true, runValidators: true }
-    );
-
-    return this._toDomain(doc);
-  }
 
   /**
    * Delete booking request (for testing only)

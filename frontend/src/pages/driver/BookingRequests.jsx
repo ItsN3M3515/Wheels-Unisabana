@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
-import PaymentConfirmation from '../../components/payments/PaymentConfirmation';
-import TripStatusSimulator from '../../components/payments/TripStatusSimulator';
 import logo from '../../assets/images/UniSabana Logo.png';
 
 export default function BookingRequests() {
@@ -76,17 +74,6 @@ export default function BookingRequests() {
     }
   };
 
-  const handlePaymentConfirmed = (booking) => {
-    setBookings(prev => prev.map(b => 
-      b.id === booking.id ? { ...b, isPaid: true } : b
-    ));
-  };
-
-  const handlePaymentNotReceived = (booking) => {
-    setBookings(prev => prev.map(b => 
-      b.id === booking.id ? { ...b, isPaid: false } : b
-    ));
-  };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('es-CO', {
@@ -515,19 +502,6 @@ export default function BookingRequests() {
                   </div>
                 )}
 
-                {/* Trip Status Simulator */}
-                {booking.status === 'accepted' && (
-                  <TripStatusSimulator
-                    booking={booking}
-                    onStatusChange={(booking, status, paymentStatus) => {
-                      if (status === 'payment_confirmed') {
-                        handlePaymentConfirmed(booking);
-                      } else if (status === 'payment_not_received') {
-                        handlePaymentNotReceived(booking);
-                      }
-                    }}
-                  />
-                )}
               </div>
             ))}
           </div>
