@@ -100,10 +100,16 @@ const listAuditQuery = Joi.object({
   entity: Joi.string().optional(),
   entityId: Joi.string().optional(),
   who: Joi.string().optional(),
+  actorId: Joi.string().optional(),
+  actorType: Joi.string().valid('admin','user','system').optional(),
+  action: Joi.string().optional(), // prefix search
+  entityType: Joi.string().optional(),
+  correlationId: Joi.string().optional(),
   from: Joi.date().iso().optional(),
   to: Joi.date().iso().optional(),
   page: Joi.number().integer().min(1).default(1).optional(),
-  pageSize: Joi.number().integer().min(1).max(100).default(50).optional()
+  pageSize: Joi.number().integer().min(1).max(200).default(50).optional(),
+  sort: Joi.string().optional()
 }).options({ abortEarly: false, stripUnknown: true });
 
 const exportAuditQuery = Joi.object({

@@ -925,22 +925,64 @@ module.exports.listModerationNotes = listModerationNotes;
  */
 async function listAudit(req, res, next) {
   try {
-    const { entity, entityId, who, from, to, page = 1, pageSize = 50 } = req.query;
+    const {
+      entity, entityId, who, actorId, actorType, action, entityType, correlationId, from, to, page = 1, pageSize = 50, sort = '-ts'
+    } = req.query;
     const pageNum = parseInt(page, 10);
     const pageSizeNum = parseInt(pageSize, 10);
 
+    // build Mongo query using audit document shape: ts, actor.type, actor.id, action, entity.type, entity.id, correlationId
     const query = {};
-    if (entity) query.entity = entity;
-    if (entityId) query.entityId = entityId;
-    if (who) query.who = who;
-    if (from || to) query.when = {};
-    if (from) query.when.$gte = new Date(from);
-    if (to) query.when.$lte = new Date(to);
+    if (entity) query['entity.type'] = entity;
+    if (entityType) query['entity.type'] = entityType;
+    if (entityId) query['entity.id'] = entityId;
+    if (who) query['actor.id'] = who; // legacy alias
+    if (actorId) query['actor.id'] = actorId;
+    if (actorType) query['actor.type'] = actorType;
+    if (action) {
+      // prefix search: action param 'trip.' should match /^trip\./
+      const safe = action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.action = { $regex: `^${safe}` };
+    }
+    if (correlationId) query.correlationId = correlationId;
+    if (from || to) query.ts = {};
+    if (from) query.ts.$gte = new Date(from);
+    if (to) query.ts.$lte = new Date(to);
 
     const total = await AuditLogModel.countDocuments(query);
-    const docs = await AuditLogModel.find(query).sort({ when: -1 }).skip((pageNum - 1) * pageSizeNum).limit(pageSizeNum).lean();
 
-    const items = docs.map(d => ({ id: (d._id || d.id).toString(), action: d.action, entity: d.entity, entityId: d.entityId, who: d.who, when: d.when ? new Date(d.when).toISOString() : null, what: d.what, why: d.why, correlationId: d.correlationId }));
+    // sorting
+    const sortObj = {};
+    if (sort) {
+      const dir = sort.startsWith('-') ? -1 : 1;
+      const field = sort.replace(/^-/, '');
+      // map friendly field names
+      const mapped = field === 'ts' ? 'ts' : field;
+      sortObj[mapped] = dir;
+    } else {
+      sortObj.ts = -1;
+    }
+
+    const docs = await AuditLogModel.find(query).sort(sortObj).skip((pageNum - 1) * pageSizeNum).limit(pageSizeNum).lean();
+
+    // redact PII in delta/what using structuredLogger.redactPII
+    const { redactPII } = require('../middlewares/structuredLogger');
+
+    const items = docs.map(d => {
+      const out = {
+        id: (d._id || d.id).toString(),
+        ts: d.ts ? new Date(d.ts).toISOString() : null,
+        actor: d.actor || null,
+        action: d.action || null,
+        entity: d.entity || null,
+        reason: d.reason || null,
+        delta: redactPII(d.delta || d.what || null),
+        correlationId: d.correlationId || null,
+        prevHash: d.prevHash || null,
+        hash: d.hash || null
+      };
+      return out;
+    });
 
     return res.status(200).json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages: Math.max(1, Math.ceil(total / pageSizeNum)) });
   } catch (err) {
