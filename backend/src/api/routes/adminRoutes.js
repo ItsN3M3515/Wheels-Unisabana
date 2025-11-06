@@ -13,4 +13,7 @@ router.get('/trips', authenticate, requireRole(['admin']), adminController.listT
 // GET /admin/bookings
 router.get('/bookings', authenticate, requireRole(['admin']), adminController.listBookings);
 
+// GET /admin/refunds
+router.get('/refunds', authenticate, requireRole(['admin']), adminController.listRefunds);
+
 module.exports = router;

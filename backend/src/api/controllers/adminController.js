@@ -328,3 +328,78 @@ async function listBookings(req, res, next) {
 }
 
 module.exports = { listUsers, listTrips, listBookings };
+
+/**
+ * Admin: List refunds with filters and pagination
+ * Filters: status, reason, transactionId, bookingId, createdFrom, createdTo
+ */
+async function listRefunds(req, res, next) {
+  try {
+    const {
+      status,
+      reason,
+      transactionId,
+      bookingId,
+      createdFrom,
+      createdTo,
+      page = '1',
+      pageSize = '25',
+      sort = '-createdAt'
+    } = req.query;
+
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+    if (Number.isNaN(pageNum) || Number.isNaN(pageSizeNum) || pageNum < 1 || pageSizeNum < 1) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Invalid pagination parameters', correlationId: req.correlationId });
+    }
+
+    const db = require('mongoose').connection.db;
+    const coll = db.collection('refunds');
+
+    const query = {};
+    if (status) query.status = status;
+    if (reason) query.reason = reason;
+    if (transactionId) query.transactionId = transactionId;
+    if (bookingId) query.bookingRequestId = bookingId;
+    if (createdFrom || createdTo) {
+      query.createdAt = {};
+      if (createdFrom) query.createdAt.$gte = new Date(createdFrom);
+      if (createdTo) query.createdAt.$lte = new Date(createdTo);
+    }
+
+    // Count and fetch
+    const total = await coll.countDocuments(query);
+
+    // Build sort
+    const sortObj = {};
+    if (sort) {
+      const dir = sort.startsWith('-') ? -1 : 1;
+      const field = sort.replace(/^-/, '');
+      sortObj[field] = dir;
+    } else {
+      sortObj.createdAt = -1;
+    }
+
+    const skip = (pageNum - 1) * pageSizeNum;
+
+    const docs = await coll.find(query).sort(sortObj).skip(skip).limit(pageSizeNum).toArray();
+
+    const items = docs.map(d => ({
+      id: (d._id || d.id).toString(),
+      transactionId: d.transactionId || null,
+      bookingId: d.bookingRequestId ? (d.bookingRequestId.toString ? d.bookingRequestId.toString() : d.bookingRequestId) : null,
+      amount: d.amount || null,
+      currency: d.currency || null,
+      status: d.status || null,
+      reason: d.reason || null,
+      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : null
+    }));
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSizeNum));
+    res.json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages, requestId: req.correlationId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listUsers, listTrips, listBookings, listRefunds };
