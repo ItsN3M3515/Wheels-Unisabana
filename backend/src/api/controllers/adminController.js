@@ -125,6 +125,74 @@ module.exports = { listUsers };
  * Admin: List trips with filters, pagination and capacity snapshot
  * Filters supported: status, driverId, from (origin.text), to (destination.text), departureFrom, departureTo
  */
+/**
+ * @openapi
+ * /admin/trips:
+ *   get:
+ *     tags:
+ *       - System
+ *       - Trip Offers
+ *     summary: List trips (admin)
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: driverId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: departureFrom
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: departureTo
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of trips with capacity snapshot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TripOfferResponse'
+ *                 page:
+ *                   type: integer
+ *                 pageSize:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 requestId:
+ *                   type: string
+ */
 async function listTrips(req, res, next) {
   try {
     const {
@@ -401,5 +469,155 @@ async function listRefunds(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * @openapi
+ * /admin/bookings:
+ *   get:
+ *     tags:
+ *       - System
+ *       - Trip Offers
+ *     summary: List bookings (admin)
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: tripId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: passengerId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: paid
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of bookings
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       tripId:
+ *                         type: string
+ *                       passenger:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                       status:
+ *                         type: string
+ *                       seats:
+ *                         type: integer
+ *                       transaction:
+ *                         type: object
+ *                 page:
+ *                   type: integer
+ *                 pageSize:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 requestId:
+ *                   type: string
+ */
+
+/**
+ * @openapi
+ * /admin/refunds:
+ *   get:
+ *     tags:
+ *       - System
+ *       - Trip Offers
+ *     summary: List refunds (admin)
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: transactionId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: bookingId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: List of refunds
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       transactionId:
+ *                         type: string
+ *                       bookingId:
+ *                         type: string
+ *                       amount:
+ *                         type: number
+ *                       currency:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       reason:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 page:
+ *                   type: integer
+ *                 pageSize:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 requestId:
+ *                   type: string
+ */
 
 module.exports = { listUsers, listTrips, listBookings, listRefunds };
