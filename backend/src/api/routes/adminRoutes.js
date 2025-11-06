@@ -7,4 +7,7 @@ const adminController = require('../controllers/adminController');
 // GET /admin/users
 router.get('/users', authenticate, requireRole(['admin']), adminController.listUsers);
 
+// GET /admin/trips
+router.get('/trips', authenticate, requireRole(['admin']), adminController.listTrips);
+
 module.exports = router;

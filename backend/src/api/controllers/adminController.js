@@ -120,3 +120,96 @@ async function listUsers(req, res, next) {
 }
 
 module.exports = { listUsers };
+
+/**
+ * Admin: List trips with filters, pagination and capacity snapshot
+ * Filters supported: status, driverId, from (origin.text), to (destination.text), departureFrom, departureTo
+ */
+async function listTrips(req, res, next) {
+  try {
+    const {
+      status,
+      driverId,
+      from,
+      to,
+      departureFrom,
+      departureTo,
+      page = '1',
+      pageSize = '25',
+      sort = '-departureAt'
+    } = req.query;
+
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+    if (Number.isNaN(pageNum) || Number.isNaN(pageSizeNum) || pageNum < 1 || pageSizeNum < 1) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Invalid pagination parameters', correlationId: req.correlationId });
+    }
+
+    const query = {};
+    if (status) {
+      query.status = Array.isArray(status) ? { $in: status } : status;
+    }
+    if (driverId) {
+      // Accept driverId string
+      query.driverId = driverId;
+    }
+    if (from) {
+      query['origin.text'] = from;
+    }
+    if (to) {
+      query['destination.text'] = to;
+    }
+    if (departureFrom || departureTo) {
+      query.departureAt = {};
+      if (departureFrom) query.departureAt.$gte = new Date(departureFrom);
+      if (departureTo) query.departureAt.$lte = new Date(departureTo);
+    }
+
+    const sortObj = {};
+    if (sort) {
+      const direction = sort.startsWith('-') ? -1 : 1;
+      const field = sort.replace(/^-/, '');
+      sortObj[field] = direction;
+    } else {
+      sortObj.departureAt = -1;
+    }
+
+    const skip = (pageNum - 1) * pageSizeNum;
+
+    // Count total and fetch page
+    const [total, docs] = await Promise.all([
+      TripOfferModel.countDocuments(query),
+      TripOfferModel.find(query)
+        .select('driverId origin destination departureAt status totalSeats')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSizeNum)
+        .lean()
+    ]);
+
+    // For each trip compute allocatedSeats (accepted bookings) and remaining
+    const items = await Promise.all(docs.map(async (t) => {
+      const tripId = t._id;
+      const allocatedSeats = await BookingRequestModel.countDocuments({ tripId, status: 'accepted' });
+      const totalSeats = t.totalSeats || 0;
+      const remainingSeats = Math.max(0, totalSeats - allocatedSeats);
+
+      return {
+        id: tripId.toString(),
+        driverId: t.driverId ? t.driverId.toString() : null,
+        route: { from: t.origin && t.origin.text ? t.origin.text : '', to: t.destination && t.destination.text ? t.destination.text : '' },
+        departureAt: t.departureAt ? new Date(t.departureAt).toISOString() : null,
+        status: t.status,
+        capacity: { totalSeats, allocatedSeats, remainingSeats }
+      };
+    }));
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSizeNum));
+
+    res.json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages, requestId: req.correlationId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listUsers, listTrips };
