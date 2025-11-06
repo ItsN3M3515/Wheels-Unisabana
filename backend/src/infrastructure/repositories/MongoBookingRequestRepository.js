@@ -401,6 +401,90 @@ class MongoBookingRequestRepository {
   }
 
   /**
+   * Admin declines a pending booking (pending -> declined_by_admin)
+   * @param {string} id - Booking request ID
+   * @param {string} adminId - Admin user id
+   * @param {string} reason - Optional reason
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async adminDecline(id, adminId, reason = null) {
+    const updateData = {
+      status: 'declined_by_admin',
+      declinedAt: new Date(),
+      declinedBy: adminId || null
+    };
+
+    if (reason) updateData.declineReason = reason;
+
+    const doc = await BookingRequestModel.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) return null;
+
+    return this._toDomain(doc);
+  }
+
+  /**
+   * Cancel an accepted booking as platform (accepted -> canceled_by_platform)
+   * Uses MongoDB transaction to update booking, set refundNeeded, and deallocate seats atomically.
+   * @param {BookingRequest} bookingEntity - domain booking entity
+   * @param {MongoSeatLedgerRepository} seatLedgerRepository
+   * @returns {Promise<BookingRequest>} Updated booking request
+   */
+  async cancelByPlatformWithTransaction(bookingEntity, seatLedgerRepository) {
+    const session = await BookingRequestModel.startSession();
+
+    try {
+      let updatedBooking = null;
+
+      await session.withTransaction(async () => {
+        // 1. Update booking status to canceled_by_platform and set refundNeeded
+        const doc = await BookingRequestModel.findByIdAndUpdate(
+          bookingEntity.id,
+          {
+            status: 'canceled_by_platform',
+            canceledAt: new Date(),
+            cancellationReason: bookingEntity.cancellationReason || '',
+            refundNeeded: true,
+            updatedAt: new Date()
+          },
+          { new: true, runValidators: true, session }
+        );
+
+        if (!doc) {
+          throw new Error(`Booking request not found: ${bookingEntity.id}`);
+        }
+
+        // 2. Atomically deallocate seats from ledger
+        const ledgerUpdated = await seatLedgerRepository.deallocateSeats(
+          bookingEntity.tripId,
+          bookingEntity.seats
+        );
+
+        if (!ledgerUpdated) {
+          throw new Error(
+            `Failed to deallocate seats atomically. Ledger may not exist or would go negative. tripId: ${bookingEntity.tripId}, seats: ${bookingEntity.seats}`
+          );
+        }
+
+        updatedBooking = doc;
+      });
+
+      return updatedBooking ? this._toDomain(updatedBooking) : null;
+    } catch (error) {
+      console.error(
+        `[MongoBookingRequestRepository] Transaction failed during cancelByPlatform | bookingId: ${bookingEntity.id} | tripId: ${bookingEntity.tripId} | error: ${error.message}`
+      );
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /**
    * Find all pending bookings for a trip (no pagination)
    * Used for cascade operations when driver cancels trip
    * @param {string} tripId - Trip ID

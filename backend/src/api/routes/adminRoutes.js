@@ -5,6 +5,7 @@ const { requireRole } = require('../middlewares/authenticate');
 const adminController = require('../controllers/adminController');
 const validateRequest = require('../middlewares/validateRequest');
 const { listTripsQuery, listBookingsQuery, listRefundsQuery, suspendUserSchema, forceCancelTripSchema } = require('../validation/adminSchemas');
+const { correctBookingStateSchema } = require('../validation/adminSchemas');
 
 // GET /admin/users
 router.get('/users', authenticate, requireRole(['admin']), adminController.listUsers);
@@ -26,5 +27,8 @@ router.patch('/users/:id/suspension', authenticate, requireRole(['admin']), vali
 
 // POST /admin/trips/:tripId/force-cancel
 router.post('/trips/:tripId/force-cancel', authenticate, requireRole(['admin']), validateRequest(forceCancelTripSchema, 'body'), adminController.forceCancelTrip);
+
+// POST /admin/bookings/:bookingId/correct-state
+router.post('/bookings/:bookingId/correct-state', authenticate, requireRole(['admin']), validateRequest(correctBookingStateSchema, 'body'), adminController.correctBookingState);
 
 module.exports = router;

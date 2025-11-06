@@ -46,10 +46,20 @@ const forceCancelTripSchema = Joi.object({
   reason: Joi.string().min(3).max(1000).required()
 }).options({ abortEarly: false, stripUnknown: true });
 
+const correctBookingStateSchema = Joi.object({
+  targetState: Joi.string().valid('declined_by_admin', 'canceled_by_platform').required(),
+  refund: Joi.object({
+    amount: Joi.number().positive().required(),
+    reason: Joi.string().max(500).required()
+  }).optional(),
+  reason: Joi.string().min(3).max(1000).required()
+}).options({ abortEarly: false, stripUnknown: true });
+
 module.exports = {
   listTripsQuery,
   listBookingsQuery,
   listRefundsQuery
   ,suspendUserSchema,
   forceCancelTripSchema
+  ,correctBookingStateSchema
 };

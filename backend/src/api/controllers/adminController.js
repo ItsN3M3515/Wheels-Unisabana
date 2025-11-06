@@ -777,3 +777,114 @@ async function listRefunds(req, res, next) {
  */
 
 module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser, forceCancelTrip };
+
+
+/**
+ * POST /admin/bookings/:bookingId/correct-state
+ * Body: { targetState: 'declined_by_admin'|'canceled_by_platform', refund?: { amount, reason }, reason }
+ */
+async function correctBookingState(req, res, next) {
+  try {
+    const bookingId = req.params.bookingId;
+    const { targetState, refund, reason } = req.body || {};
+
+    if (!targetState || !reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Missing targetState or reason', correlationId: req.correlationId });
+    }
+
+    const bookingRepo = new MongoBookingRequestRepository();
+    const seatLedgerRepo = new MongoSeatLedgerRepository();
+
+    const booking = await bookingRepo.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ code: 'not_found', message: 'Booking not found', correlationId: req.correlationId });
+    }
+
+    const oldStatus = booking.status;
+
+    // Allowed transitions
+    if (targetState === 'declined_by_admin') {
+      if (oldStatus !== 'pending') {
+        return res.status(409).json({ code: 'invalid_state', message: 'Transition not permitted', correlationId: req.correlationId });
+      }
+
+      // Perform admin decline
+      const adminId = req.user && req.user.id ? req.user.id : null;
+      const updated = await bookingRepo.adminDecline(bookingId, adminId, reason);
+
+      await AuditService.recordAdminAction({ action: 'correct_booking_state', entity: 'BookingRequest', entityId: bookingId, who: adminId, before: { status: oldStatus }, after: { status: updated.status }, why: reason, req });
+
+      return res.json({ bookingId, oldStatus, newStatus: updated.status, effects: { ledgerReleased: 0, refundCreated: false } });
+    }
+
+    if (targetState === 'canceled_by_platform') {
+      if (oldStatus !== 'accepted') {
+        return res.status(409).json({ code: 'invalid_state', message: 'Transition not permitted', correlationId: req.correlationId });
+      }
+
+      // If refund is requested, validate refundable balance from payments collection
+      const db = require('mongoose').connection.db;
+      let refundCreated = false;
+
+      if (refund) {
+        try {
+          const paymentsColl = db.collection('payments');
+          const payment = await paymentsColl.findOne({ bookingRequestId: bookingId });
+          if (!payment) {
+            return res.status(400).json({ code: 'invalid_schema', message: 'No refundable balance', correlationId: req.correlationId });
+          }
+          const refundedAmount = payment.refundedAmount || 0;
+          const remaining = (payment.amount || 0) - refundedAmount;
+          if (refund.amount > remaining) {
+            return res.status(400).json({ code: 'invalid_schema', message: 'Refund amount exceeds refundable balance', correlationId: req.correlationId });
+          }
+        } catch (err) {
+          // If payments lookup fails, return schema error
+          return res.status(400).json({ code: 'invalid_schema', message: 'Unable to validate refund', correlationId: req.correlationId });
+        }
+      }
+
+      // Perform transactional cancel-by-platform
+      const bookingEntity = booking; // domain entity returned by repo
+      let updatedBooking;
+      try {
+        updatedBooking = await bookingRepo.cancelByPlatformWithTransaction(bookingEntity, seatLedgerRepo);
+      } catch (err) {
+        // Map transaction errors
+        console.error('[adminController] cancelByPlatform failed:', err && err.message);
+        return res.status(500).json({ code: 'domain', message: 'Failed to apply correction atomically', correlationId: req.correlationId });
+      }
+
+      // Create refund record if requested
+      if (refund) {
+        const coll = db.collection('refunds');
+        try {
+          await coll.insertOne({
+            bookingRequestId: bookingId,
+            amount: refund.amount,
+            currency: refund.currency || 'COP',
+            reason: refund.reason || refund.reason,
+            status: 'created',
+            createdAt: new Date()
+          });
+          refundCreated = true;
+        } catch (err) {
+          console.error('[adminController] Failed to create refund record:', err && err.message);
+        }
+      }
+
+      // Audit
+      const adminId = req.user && req.user.id ? req.user.id : null;
+      await AuditService.recordAdminAction({ action: 'correct_booking_state', entity: 'BookingRequest', entityId: bookingId, who: adminId, before: { status: oldStatus }, after: { status: updatedBooking.status }, why: reason, req });
+
+      const effects = { ledgerReleased: bookingEntity.seats || 0, refundCreated };
+      return res.json({ bookingId, oldStatus, newStatus: updatedBooking.status, effects });
+    }
+
+    return res.status(400).json({ code: 'invalid_schema', message: 'Invalid targetState', correlationId: req.correlationId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.correctBookingState = correctBookingState;
