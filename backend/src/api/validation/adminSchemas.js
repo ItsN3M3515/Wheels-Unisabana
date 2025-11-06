@@ -42,9 +42,14 @@ const suspendUserSchema = Joi.object({
   reason: Joi.string().min(3).max(500).required()
 }).options({ abortEarly: false, stripUnknown: true });
 
+const forceCancelTripSchema = Joi.object({
+  reason: Joi.string().min(3).max(1000).required()
+}).options({ abortEarly: false, stripUnknown: true });
+
 module.exports = {
   listTripsQuery,
   listBookingsQuery,
   listRefundsQuery
-  ,suspendUserSchema
+  ,suspendUserSchema,
+  forceCancelTripSchema
 };

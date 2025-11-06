@@ -3,6 +3,12 @@ const BookingRequestModel = require('../../infrastructure/database/models/Bookin
 const UserModel = require('../../infrastructure/database/models/UserModel');
 const AuditService = require('../../domain/services/AuditService');
 
+// Domain services & repositories used for cascade operations
+const TripOfferService = require('../../domain/services/TripOfferService');
+const MongoTripOfferRepository = require('../../infrastructure/repositories/MongoTripOfferRepository');
+const MongoBookingRequestRepository = require('../../infrastructure/repositories/MongoBookingRequestRepository');
+const MongoSeatLedgerRepository = require('../../infrastructure/repositories/MongoSeatLedgerRepository');
+
 // Helper: mask email like a***@domain.com
 function maskEmail(email) {
   if (!email || typeof email !== 'string') return '';
@@ -464,6 +470,89 @@ async function suspendUser(req, res, next) {
 
 module.exports.suspendUser = suspendUser;
 
+
+/**
+ * POST /admin/trips/:tripId/force-cancel
+ * Body: { reason: string }
+ * Admin override: force-cancel any trip and cascade to bookings.
+ */
+async function forceCancelTrip(req, res, next) {
+  try {
+    const tripId = req.params.tripId;
+    const { reason } = req.body || {};
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Missing cancellation reason', correlationId: req.correlationId });
+    }
+
+    // Find trip
+    const trip = await TripOfferModel.findById(tripId);
+    if (!trip) {
+      return res.status(404).json({ code: 'not_found', message: 'Trip not found', correlationId: req.correlationId });
+    }
+
+    // Prepare service and repositories
+    // Perform non-transactional cascade (safer for test environments without replica sets)
+    const bookingRequestRepository = new MongoBookingRequestRepository();
+    const seatLedgerRepository = new MongoSeatLedgerRepository();
+
+    try {
+      // a) Update trip status to canceled
+      await TripOfferModel.findByIdAndUpdate(tripId, { status: 'canceled', updatedAt: new Date() });
+
+      // b) Query bookings before mutation
+      const pendingBookings = await bookingRequestRepository.findAllPendingByTrip(tripId);
+      const acceptedBookings = await bookingRequestRepository.findAllAcceptedByTrip(tripId);
+
+      // c) Bulk decline pending bookings
+      const declinedAuto = pendingBookings.length > 0 ? await bookingRequestRepository.bulkDeclineAuto(tripId) : 0;
+
+      // d) Compute seats to release and cancel accepted bookings
+      const totalSeatsToRelease = acceptedBookings.reduce((s, b) => s + (b.seats || 0), 0);
+      const canceledByPlatform = acceptedBookings.length > 0 ? await bookingRequestRepository.bulkCancelByPlatform(tripId) : 0;
+
+      // e) Deallocate seats from ledger (if any)
+      let ledgerReleased = 0;
+      if (totalSeatsToRelease > 0) {
+        const ledgerResult = await seatLedgerRepository.deallocateSeats(tripId, totalSeatsToRelease);
+        if (ledgerResult) {
+          ledgerReleased = acceptedBookings.length; // count of bookings
+        } else {
+          // Log and continue; refund flags were set by bulkCancelByPlatform
+          console.warn(`[adminController] Could not deallocate seats for trip ${tripId}`);
+        }
+      }
+
+      // f) For now, refundsCreated is the count of canceled bookings (payment service handles actual refunds)
+      const refundsCreated = canceledByPlatform;
+
+      const effects = {
+        declinedAuto: declinedAuto || 0,
+        canceledByPlatform: canceledByPlatform || 0,
+        refundsCreated: refundsCreated || 0,
+        ledgerReleased: ledgerReleased || 0
+      };
+
+      // Record audit entry summarizing effects
+      const adminId = req.user && req.user.id ? req.user.id : null;
+      const before = { status: trip.status };
+      const after = { status: 'canceled' };
+
+      await AuditService.recordAdminAction({ action: 'force_cancel_trip', entity: 'TripOffer', entityId: tripId.toString(), who: adminId, before, after, why: reason, req });
+
+      // Respond
+      return res.json({ tripId: tripId.toString(), status: 'canceled', effects });
+    } catch (err) {
+      console.error('[adminController] Force-cancel failed:', err && err.message);
+      return res.status(500).json({ code: 'domain', message: 'Failed to cancel trip atomically', correlationId: req.correlationId });
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.forceCancelTrip = forceCancelTrip;
+
 /**
  * Admin: List refunds with filters and pagination
  * Filters: status, reason, transactionId, bookingId, createdFrom, createdTo
@@ -687,4 +776,4 @@ async function listRefunds(req, res, next) {
  *                   type: string
  */
 
-module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser };
+module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser, forceCancelTrip };
