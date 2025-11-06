@@ -74,6 +74,7 @@ const driverRoutes = require('./api/routes/driverRoutes');
 const internalRoutes = require('./api/routes/internalRoutes');
 const notificationRoutes = require('./api/routes/notificationRoutes');
 const reviewRoutes = require('./api/routes/reviewRoutes');
+const adminRoutes = require('./api/routes/adminRoutes');
 app.use('/api/users', userRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/drivers', vehicleRoutes);
@@ -87,6 +88,8 @@ app.use('/', internalRoutes);
 app.use('/notifications', notificationRoutes);
 // Trip-level routes (reviews)
 app.use('/trips', reviewRoutes);
+// Admin routes
+app.use('/admin', adminRoutes);
 
 // Swagger Documentation
 serveSwagger(app);
