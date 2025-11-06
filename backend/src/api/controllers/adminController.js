@@ -213,3 +213,118 @@ async function listTrips(req, res, next) {
 }
 
 module.exports = { listUsers, listTrips };
+
+// Helper: mask name like J*** D***
+function maskName(firstName, lastName) {
+  const mask = (s) => {
+    if (!s || s.length === 0) return '';
+    const first = s[0];
+    return `${first}***`;
+  };
+  return `${mask(firstName)} ${mask(lastName)}`.trim();
+}
+
+/**
+ * Admin: List bookings with filters, pagination and optional transaction summary
+ */
+async function listBookings(req, res, next) {
+  try {
+    const {
+      tripId,
+      passengerId,
+      status,
+      paid,
+      createdFrom,
+      createdTo,
+      page = '1',
+      pageSize = '25',
+      sort = '-createdAt'
+    } = req.query;
+
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+    if (Number.isNaN(pageNum) || Number.isNaN(pageSizeNum) || pageNum < 1 || pageSizeNum < 1) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Invalid pagination parameters', correlationId: req.correlationId });
+    }
+
+    const query = {};
+    if (tripId) query.tripId = tripId;
+    if (passengerId) query.passengerId = passengerId;
+    if (status) query.status = Array.isArray(status) ? { $in: status } : status;
+    if (typeof paid !== 'undefined') {
+      if (paid === 'true' || paid === true) query.isPaid = true;
+      else if (paid === 'false' || paid === false) query.isPaid = false;
+    }
+    if (createdFrom || createdTo) {
+      query.createdAt = {};
+      if (createdFrom) query.createdAt.$gte = new Date(createdFrom);
+      if (createdTo) query.createdAt.$lte = new Date(createdTo);
+    }
+
+    const sortObj = {};
+    if (sort) {
+      const direction = sort.startsWith('-') ? -1 : 1;
+      const field = sort.replace(/^-/, '');
+      sortObj[field] = direction;
+    } else {
+      sortObj.createdAt = -1;
+    }
+
+    const skip = (pageNum - 1) * pageSizeNum;
+
+    const [total, docs] = await Promise.all([
+      BookingRequestModel.countDocuments(query),
+      BookingRequestModel.find(query)
+        .populate('passengerId', 'firstName lastName')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(pageSizeNum)
+        .lean()
+    ]);
+
+    // For transaction lookup, query payments collection if present
+    const db = require('mongoose').connection.db;
+
+    const items = await Promise.all(docs.map(async (b) => {
+      const passenger = b.passengerId || null;
+      const passengerDto = passenger ? { id: passenger._id.toString(), name: maskName(passenger.firstName, passenger.lastName) } : null;
+
+      // Try to find a transaction in the 'payments' collection linked by bookingRequestId or bookingId
+      let txn = null;
+      try {
+        if (db && b._id) {
+          const paymentsColl = db.collection('payments');
+          const found = await paymentsColl.findOne({ bookingRequestId: b._id });
+          if (found) {
+            txn = {
+              id: (found._id || found.id).toString(),
+              amount: found.amount || null,
+              currency: found.currency || null,
+              status: found.status || null,
+              refundedAmount: found.refundedAmount || 0
+            };
+          }
+        }
+      } catch (e) {
+        // ignore transaction lookup errors
+      }
+
+      return {
+        id: b._id.toString(),
+        tripId: b.tripId ? b.tripId.toString() : null,
+        passenger: passengerDto,
+        status: b.status,
+        seats: b.seats || 0,
+        transaction: txn
+      };
+    }));
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSizeNum));
+
+    res.json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages, requestId: req.correlationId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listUsers, listTrips, listBookings };
