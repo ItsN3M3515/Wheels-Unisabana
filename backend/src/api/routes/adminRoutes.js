@@ -4,8 +4,9 @@ const authenticate = require('../middlewares/authenticate');
 const { requireRole } = require('../middlewares/authenticate');
 const adminController = require('../controllers/adminController');
 const validateRequest = require('../middlewares/validateRequest');
-const { listTripsQuery, listBookingsQuery, listRefundsQuery, suspendUserSchema, forceCancelTripSchema } = require('../validation/adminSchemas');
+const { listTripsQuery, listBookingsQuery, listRefundsQuery, suspendUserSchema, forceCancelTripSchema, publishBanSchema } = require('../validation/adminSchemas');
 const { correctBookingStateSchema } = require('../validation/adminSchemas');
+const { moderationNoteSchema, evidenceUploadRequestSchema, listModerationNotesQuery, listAuditQuery, exportAuditQuery } = require('../validation/adminSchemas');
 
 // GET /admin/users
 router.get('/users', authenticate, requireRole(['admin']), adminController.listUsers);
@@ -30,5 +31,17 @@ router.post('/trips/:tripId/force-cancel', authenticate, requireRole(['admin']),
 
 // POST /admin/bookings/:bookingId/correct-state
 router.post('/bookings/:bookingId/correct-state', authenticate, requireRole(['admin']), validateRequest(correctBookingStateSchema, 'body'), adminController.correctBookingState);
+
+// PATCH /admin/drivers/:driverId/publish-ban
+router.patch('/drivers/:driverId/publish-ban', authenticate, requireRole(['admin']), validateRequest(publishBanSchema, 'body'), adminController.publishBan);
+
+// Moderation notes
+router.post('/moderation/notes', authenticate, requireRole(['admin']), validateRequest(moderationNoteSchema, 'body'), adminController.createModerationNote);
+router.post('/moderation/evidence/upload-url', authenticate, requireRole(['admin']), validateRequest(evidenceUploadRequestSchema, 'body'), adminController.createEvidenceUploadUrl);
+router.get('/moderation/notes', authenticate, requireRole(['admin']), validateRequest(listModerationNotesQuery, 'query'), adminController.listModerationNotes);
+
+// Audit listing and export
+router.get('/audit', authenticate, requireRole(['admin']), validateRequest(listAuditQuery, 'query'), adminController.listAudit);
+router.get('/audit/export', authenticate, requireRole(['admin']), validateRequest(exportAuditQuery, 'query'), adminController.exportAudit);
 
 module.exports = router;

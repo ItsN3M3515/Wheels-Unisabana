@@ -13,6 +13,8 @@ const auditLogSchema = new mongoose.Schema(
     correlationId: { type: String, default: null },
     ip: { type: String, default: null },
     userAgent: { type: String, default: null }
+    ,prevHash: { type: String, default: null },
+    hash: { type: String, default: null, index: true }
   },
   {
     timestamps: false,

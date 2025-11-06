@@ -11,6 +11,7 @@ const errorHandler = require('./api/middlewares/errorHandler');
 const { generalRateLimiter } = require('./api/middlewares/rateLimiter');
 const { serveSwagger } = require('./api/middlewares/swagger');
 const { structuredLogger } = require('./api/middlewares/structuredLogger');
+const auditMiddleware = require('./api/middlewares/auditMiddleware');
 
 // Rutas
 const userRoutes = require('./api/routes/userRoutes');
@@ -45,6 +46,7 @@ app.use(morgan('combined'));
 app.use(cookieParser());
 app.use(correlationId);
 app.use(structuredLogger); // Structured logging with PII redaction
+app.use(auditMiddleware);
 app.use(generalRateLimiter);
 
 // Mount email notification webhooks BEFORE body parsing so raw body is available

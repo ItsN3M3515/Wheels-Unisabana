@@ -2,6 +2,10 @@ const TripOfferModel = require('../../infrastructure/database/models/TripOfferMo
 const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
 const UserModel = require('../../infrastructure/database/models/UserModel');
 const AuditService = require('../../domain/services/AuditService');
+const ModerationNote = require('../../infrastructure/database/models/ModerationNoteModel');
+const Evidence = require('../../infrastructure/database/models/EvidenceModel');
+const AuditLogModel = require('../../infrastructure/database/models/AuditLogModel');
+const AuditAnchor = require('../../infrastructure/database/models/AuditAnchorModel');
 
 // Domain services & repositories used for cascade operations
 const TripOfferService = require('../../domain/services/TripOfferService');
@@ -428,7 +432,7 @@ async function suspendUser(req, res, next) {
       // Idempotent: if already suspended, return current state
       if (user.suspended) {
         // Still create an audit entry for the admin attempt
-        await AuditService.recordAdminAction({ action: 'suspend_attempt', entity: 'User', entityId: userId, who: adminId, before: { suspended: true }, after: { suspended: true }, why: reason, req });
+    await res.audit({ actor: { type: 'admin', id: adminId }, action: 'suspend_attempt', entity: { type: 'User', id: userId }, reason, delta: { before: { suspended: true }, after: { suspended: true } }, correlationId: req.correlationId });
         return res.json({ userId: userId.toString(), status: 'suspended', suspendedAt: user.suspendedAt ? new Date(user.suspendedAt).toISOString() : new Date().toISOString(), by: adminId });
       }
 
@@ -440,7 +444,7 @@ async function suspendUser(req, res, next) {
       await user.save();
 
       const after = { suspended: user.suspended, suspendedAt: user.suspendedAt, suspensionReason: user.suspensionReason };
-      await AuditService.recordAdminAction({ action: 'suspend', entity: 'User', entityId: userId, who: adminId, before, after, why: reason, req });
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'suspend', entity: { type: 'User', id: userId }, reason, delta: { before, after }, correlationId: req.correlationId });
 
       return res.json({ userId: userId.toString(), status: 'suspended', suspendedAt: user.suspendedAt.toISOString(), by: adminId });
     }
@@ -448,7 +452,7 @@ async function suspendUser(req, res, next) {
     // unsuspend
     if (!user.suspended) {
       // idempotent no-op
-      await AuditService.recordAdminAction({ action: 'unsuspend_attempt', entity: 'User', entityId: userId, who: adminId, before: { suspended: false }, after: { suspended: false }, why: reason, req });
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'unsuspend_attempt', entity: { type: 'User', id: userId }, reason, delta: { before: { suspended: false }, after: { suspended: false } }, correlationId: req.correlationId });
       return res.json({ userId: userId.toString(), status: 'active', by: adminId });
     }
 
@@ -459,7 +463,7 @@ async function suspendUser(req, res, next) {
     user.suspensionReason = '';
     await user.save();
     const afterU = { suspended: false, suspendedAt: null, suspensionReason: '' };
-    await AuditService.recordAdminAction({ action: 'unsuspend', entity: 'User', entityId: userId, who: adminId, before: beforeU, after: afterU, why: reason, req });
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'unsuspend', entity: { type: 'User', id: userId }, reason, delta: { before: beforeU, after: afterU }, correlationId: req.correlationId });
 
     return res.json({ userId: userId.toString(), status: 'active', by: adminId });
 
@@ -469,6 +473,48 @@ async function suspendUser(req, res, next) {
 }
 
 module.exports.suspendUser = suspendUser;
+
+
+/**
+ * PATCH /admin/drivers/:driverId/publish-ban
+ * Body: { banUntil: ISODate|null, reason: string }
+ * Sets or clears a temporary publish ban for drivers. Requires admin role.
+ */
+async function publishBan(req, res, next) {
+  try {
+    const driverId = req.params.driverId;
+    const { banUntil, reason } = req.body || {};
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Missing reason', correlationId: req.correlationId });
+    }
+
+    const user = await UserModel.findById(driverId);
+    if (!user || user.role !== 'driver') {
+      return res.status(404).json({ code: 'not_found', message: 'Driver not found', correlationId: req.correlationId });
+    }
+
+    const adminId = req.user && req.user.id ? req.user.id : null;
+
+    const before = { publishBanUntil: user.publishBanUntil || null };
+
+    user.publishBanUntil = banUntil ? new Date(banUntil) : null;
+    user.publishBanReason = reason || '';
+    user.publishBannedBy = adminId;
+
+    await user.save();
+
+    const after = { publishBanUntil: user.publishBanUntil || null };
+
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'publish_ban', entity: { type: 'User', id: driverId }, reason, delta: { before, after }, correlationId: req.correlationId });
+
+    return res.json({ driverId: driverId.toString(), banUntil: user.publishBanUntil ? user.publishBanUntil.toISOString() : null, by: adminId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.publishBan = publishBan;
 
 
 /**
@@ -538,7 +584,7 @@ async function forceCancelTrip(req, res, next) {
       const before = { status: trip.status };
       const after = { status: 'canceled' };
 
-      await AuditService.recordAdminAction({ action: 'force_cancel_trip', entity: 'TripOffer', entityId: tripId.toString(), who: adminId, before, after, why: reason, req });
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'force_cancel_trip', entity: { type: 'TripOffer', id: tripId.toString() }, reason, delta: { before, after }, correlationId: req.correlationId, meta: { effects } });
 
       // Respond
       return res.json({ tripId: tripId.toString(), status: 'canceled', effects });
@@ -776,7 +822,184 @@ async function listRefunds(req, res, next) {
  *                   type: string
  */
 
-module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser, forceCancelTrip };
+module.exports = { listUsers, listTrips, listBookings, listRefunds, suspendUser, forceCancelTrip, publishBan, correctBookingState };
+
+/**
+ * POST /admin/moderation/evidence/upload-url
+ * Body: { filename, contentType }
+ * Returns a short-lived upload URL and evidenceId
+ */
+async function createEvidenceUploadUrl(req, res, next) {
+  try {
+    const { filename, contentType } = req.body || {};
+    const crypto = require('crypto');
+    const evidenceId = `ev_${crypto.randomBytes(4).toString('hex')}`;
+    const uploadToken = crypto.randomBytes(24).toString('hex');
+    const ttlSeconds = 60;
+    const uploadExpiresAt = new Date(Date.now() + ttlSeconds * 1000);
+
+    // Store record
+    await Evidence.create({ evidenceId, filename, contentType, uploadToken, uploadExpiresAt, createdAt: new Date() });
+
+    // For this implementation return an internal upload URL that the client can call (stub)
+    const uploadUrl = `${req.protocol}://${req.get('host')}/internal/moderation/evidence/upload/${uploadToken}`;
+
+    return res.status(200).json({ evidenceId, uploadUrl, expiresInSeconds: ttlSeconds });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /admin/moderation/notes
+ * Create a moderation note referencing an entity and optional evidence ids
+ */
+async function createModerationNote(req, res, next) {
+  try {
+    const { entity, entityId, category, reason, evidence } = req.body || {};
+    const adminId = req.user && (req.user.sub || req.user.id) ? (req.user.sub || req.user.id) : null;
+
+    // Basic entity existence checks
+    if (entity === 'user') {
+      const u = await UserModel.findById(entityId);
+      if (!u) return res.status(404).json({ code: 'not_found', message: 'Entity not found', correlationId: req.correlationId });
+    }
+    if (entity === 'trip') {
+      const TripOfferModel = require('../../infrastructure/database/models/TripOfferModel');
+      const t = await TripOfferModel.findById(entityId);
+      if (!t) return res.status(404).json({ code: 'not_found', message: 'Entity not found', correlationId: req.correlationId });
+    }
+    if (entity === 'booking') {
+      const BookingRequestModel = require('../../infrastructure/database/models/BookingRequestModel');
+      const b = await BookingRequestModel.findById(entityId);
+      if (!b) return res.status(404).json({ code: 'not_found', message: 'Entity not found', correlationId: req.correlationId });
+    }
+
+    // Defensive: ensure evidence ids exist (if provided)
+    if (Array.isArray(evidence) && evidence.length > 0) {
+      const found = await Evidence.find({ evidenceId: { $in: evidence } }).select('evidenceId').lean();
+      const foundIds = (found || []).map(f => f.evidenceId);
+      const missing = evidence.filter(e => !foundIds.includes(e));
+      if (missing.length > 0) return res.status(400).json({ code: 'invalid_schema', message: 'Unknown evidence ids', correlationId: req.correlationId });
+    }
+
+    const note = await ModerationNote.create({ entity, entityId, category, reason, evidence: evidence || [], createdBy: adminId, createdAt: new Date() });
+
+  // Audit the creation
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'create_moderation_note', entity: { type: 'ModerationNote', id: note._id.toString() }, reason, delta: { before: null, after: { entity, entityId, category, reason, evidence } }, correlationId: req.correlationId });
+
+    return res.status(201).json({ noteId: note._id.toString(), entity: { type: entity, id: entityId }, category, reason, createdAt: note.createdAt.toISOString(), by: adminId });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /admin/moderation/notes?entity=...&entityId=...&page=&pageSize=
+ */
+async function listModerationNotes(req, res, next) {
+  try {
+    const { entity, entityId, page = 1, pageSize = 20 } = req.query;
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+
+    const query = { entity, entityId };
+    const total = await ModerationNote.countDocuments(query);
+    const docs = await ModerationNote.find(query).sort({ createdAt: -1 }).skip((pageNum - 1) * pageSizeNum).limit(pageSizeNum).lean();
+
+    const items = docs.map(d => ({ noteId: d._id.toString(), category: d.category, reason: d.reason, createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : null, by: d.createdBy }));
+
+    return res.status(200).json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages: Math.max(1, Math.ceil(total / pageSizeNum)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.createEvidenceUploadUrl = createEvidenceUploadUrl;
+module.exports.createModerationNote = createModerationNote;
+module.exports.listModerationNotes = listModerationNotes;
+
+/**
+ * GET /admin/audit
+ * Paginated audit listing for admins.
+ */
+async function listAudit(req, res, next) {
+  try {
+    const { entity, entityId, who, from, to, page = 1, pageSize = 50 } = req.query;
+    const pageNum = parseInt(page, 10);
+    const pageSizeNum = parseInt(pageSize, 10);
+
+    const query = {};
+    if (entity) query.entity = entity;
+    if (entityId) query.entityId = entityId;
+    if (who) query.who = who;
+    if (from || to) query.when = {};
+    if (from) query.when.$gte = new Date(from);
+    if (to) query.when.$lte = new Date(to);
+
+    const total = await AuditLogModel.countDocuments(query);
+    const docs = await AuditLogModel.find(query).sort({ when: -1 }).skip((pageNum - 1) * pageSizeNum).limit(pageSizeNum).lean();
+
+    const items = docs.map(d => ({ id: (d._id || d.id).toString(), action: d.action, entity: d.entity, entityId: d.entityId, who: d.who, when: d.when ? new Date(d.when).toISOString() : null, what: d.what, why: d.why, correlationId: d.correlationId }));
+
+    return res.status(200).json({ items, page: pageNum, pageSize: pageSizeNum, total, totalPages: Math.max(1, Math.ceil(total / pageSizeNum)) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /admin/audit/export
+ * Streams matching audit entries as NDJSON (newline-delimited JSON).
+ */
+async function exportAudit(req, res, next) {
+  try {
+    const { entity, entityId, who, from, to } = req.query;
+    const query = {};
+    if (entity) query.entity = entity;
+    if (entityId) query.entityId = entityId;
+    if (who) query.who = who;
+    if (from || to) query.when = {};
+    if (from) query.when.$gte = new Date(from);
+    if (to) query.when.$lte = new Date(to);
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Content-Disposition', 'attachment; filename="audit_export.ndjson"');
+
+    const cursor = AuditLogModel.find(query).sort({ when: 1 }).cursor();
+    cursor.on('data', (doc) => {
+      const out = {
+        id: doc._id.toString(),
+        action: doc.action,
+        entity: doc.entity,
+        entityId: doc.entityId,
+        who: doc.who,
+        when: doc.when ? new Date(doc.when).toISOString() : null,
+        what: doc.what,
+        why: doc.why,
+        correlationId: doc.correlationId,
+        ip: doc.ip,
+        userAgent: doc.userAgent,
+        prevHash: doc.prevHash,
+        hash: doc.hash
+      };
+      res.write(JSON.stringify(out) + '\n');
+    });
+    cursor.on('end', () => {
+      res.end();
+    });
+    cursor.on('error', (err) => {
+      console.error('[adminController] exportAudit cursor error', err && err.message);
+      next(err);
+    });
+
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.listAudit = listAudit;
+module.exports.exportAudit = exportAudit;
 
 
 /**
@@ -812,7 +1035,7 @@ async function correctBookingState(req, res, next) {
       const adminId = req.user && req.user.id ? req.user.id : null;
       const updated = await bookingRepo.adminDecline(bookingId, adminId, reason);
 
-      await AuditService.recordAdminAction({ action: 'correct_booking_state', entity: 'BookingRequest', entityId: bookingId, who: adminId, before: { status: oldStatus }, after: { status: updated.status }, why: reason, req });
+  await res.audit({ actor: { type: 'admin', id: adminId }, action: 'correct_booking_state', entity: { type: 'BookingRequest', id: bookingId }, reason, delta: { before: { status: oldStatus }, after: { status: updated.status } }, correlationId: req.correlationId });
 
       return res.json({ bookingId, oldStatus, newStatus: updated.status, effects: { ledgerReleased: 0, refundCreated: false } });
     }
@@ -873,9 +1096,9 @@ async function correctBookingState(req, res, next) {
         }
       }
 
-      // Audit
-      const adminId = req.user && req.user.id ? req.user.id : null;
-      await AuditService.recordAdminAction({ action: 'correct_booking_state', entity: 'BookingRequest', entityId: bookingId, who: adminId, before: { status: oldStatus }, after: { status: updatedBooking.status }, why: reason, req });
+    // Audit
+    const adminId = req.user && req.user.id ? req.user.id : null;
+    await res.audit({ actor: { type: 'admin', id: adminId }, action: 'correct_booking_state', entity: { type: 'BookingRequest', id: bookingId }, reason, delta: { before: { status: oldStatus }, after: { status: updatedBooking.status } }, correlationId: req.correlationId });
 
       const effects = { ledgerReleased: bookingEntity.seats || 0, refundCreated };
       return res.json({ bookingId, oldStatus, newStatus: updatedBooking.status, effects });

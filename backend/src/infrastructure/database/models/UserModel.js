@@ -72,6 +72,23 @@ const userSchema = new mongoose.Schema({
     maxlength: [500, 'Suspension reason cannot exceed 500 characters'],
     default: ''
   },
+  // Temporary publish ban fields (US-8.2.4)
+  publishBanUntil: {
+    type: Date,
+    default: null,
+    index: true
+  },
+  publishBanReason: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Publish ban reason cannot exceed 500 characters'],
+    default: ''
+  },
+  publishBannedBy: {
+    // Store admin identifier as string (can be ObjectId or external id)
+    type: String,
+    default: null
+  },
   // Password reset fields
   resetPasswordToken: {
     type: String,
