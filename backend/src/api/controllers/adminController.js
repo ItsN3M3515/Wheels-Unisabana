@@ -1043,6 +1043,26 @@ async function exportAudit(req, res, next) {
 module.exports.listAudit = listAudit;
 module.exports.exportAudit = exportAudit;
 
+/**
+ * GET /admin/audit/integrity?from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Verify chain integrity and daily anchors for given inclusive date range
+ */
+async function verifyIntegrity(req, res, next) {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ code: 'invalid_schema', message: 'Missing from/to', correlationId: req.correlationId });
+
+    const AuditService = require('../../domain/services/AuditService');
+    const result = await AuditService.verifyIntegrity({ from, to });
+
+    return res.status(200).json({ range: { from, to }, verified: result.verified, breaks: result.breaks });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports.verifyIntegrity = verifyIntegrity;
+
 
 /**
  * POST /admin/bookings/:bookingId/correct-state

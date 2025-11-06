@@ -44,6 +44,7 @@ router.get('/moderation/notes', authenticate, requireRole(['admin']), validateRe
 router.get('/audit', authenticate, requireRole(['admin']), validateRequest(listAuditQuery, 'query'), adminController.listAudit);
 // New route: /admin/audit/logs (same as /admin/audit but clearer path)
 router.get('/audit/logs', authenticate, requireRole(['admin']), validateRequest(listAuditQuery, 'query'), adminController.listAudit);
+router.get('/audit/integrity', authenticate, requireRole(['admin']), validateRequest(require('../validation/adminSchemas').integrityQuery, 'query'), adminController.verifyIntegrity);
 router.get('/audit/export', authenticate, requireRole(['admin']), validateRequest(exportAuditQuery, 'query'), adminController.exportAudit);
 
 module.exports = router;

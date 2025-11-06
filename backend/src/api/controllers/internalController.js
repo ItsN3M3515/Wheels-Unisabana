@@ -116,6 +116,17 @@ class InternalController {
           }
           break;
 
+        case 'audit-anchor':
+          try {
+            const AuditService = require('../../domain/services/AuditService');
+            const dateKey = req.query.date || null;
+            result = await AuditService.generateDailyAnchor({ dateKey });
+          } catch (e) {
+            console.error('[InternalController] audit-anchor failed', e);
+            return res.status(500).json({ code: 'server_error', message: 'audit anchor generation failed', correlationId: req.correlationId });
+          }
+          break;
+
         default:
           console.log(
             `[InternalController] Invalid job name | name: ${name} | correlationId: ${req.correlationId}`

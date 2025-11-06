@@ -122,3 +122,10 @@ const exportAuditQuery = Joi.object({
 
 module.exports.listAuditQuery = listAuditQuery;
 module.exports.exportAuditQuery = exportAuditQuery;
+
+const integrityQuery = Joi.object({
+  from: Joi.date().iso().required(),
+  to: Joi.date().iso().required()
+}).options({ abortEarly: false, stripUnknown: true });
+
+module.exports.integrityQuery = integrityQuery;
