@@ -62,6 +62,7 @@ async function write(payload) {
     ts,
     actor: { type: actor && actor.type ? actor.type : null, id: actor && actor.id ? actor.id : null },
     action,
+    // Keep new shape (actor/entity objects) but also populate legacy fields for compatibility
     entity: { type: entity && entity.type ? entity.type : null, id: entity && entity.id ? entity.id : null },
     reason: reason || null,
     delta: delta || null,
@@ -73,6 +74,20 @@ async function write(payload) {
     hmacDay,
     meta: meta || {}
   };
+
+  // Populate legacy audit model fields (some code paths still rely on old shape)
+  // AuditLogModel schema expects: action (string), entity (string), entityId, who, when, what, why
+  try {
+    entry.entity = entity && entity.type ? String(entity.type) : (typeof entity === 'string' ? entity : null);
+    entry.entityId = entity && entity.id ? entity.id : null;
+    entry.who = actor && actor.id ? String(actor.id) : null;
+    entry.when = ts;
+    // Map delta to legacy `what.after` for compatibility
+    entry.what = { after: delta || null };
+    entry.why = reason || '';
+  } catch (e) {
+    // ignore mapping errors (best-effort compatibility)
+  }
 
   // Persist within session if provided
   if (session) {

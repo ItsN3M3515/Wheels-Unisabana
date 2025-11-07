@@ -116,8 +116,13 @@ const exportAuditQuery = Joi.object({
   entity: Joi.string().optional(),
   entityId: Joi.string().optional(),
   who: Joi.string().optional(),
-  from: Joi.date().iso().optional(),
-  to: Joi.date().iso().optional()
+  actorId: Joi.string().optional(),
+  actorType: Joi.string().valid('admin','user','system').optional(),
+  action: Joi.string().optional(),
+  entityType: Joi.string().optional(),
+  correlationId: Joi.string().optional(),
+  from: Joi.date().iso().required(),
+  to: Joi.date().iso().required()
 }).options({ abortEarly: false, stripUnknown: true });
 
 module.exports.listAuditQuery = listAuditQuery;

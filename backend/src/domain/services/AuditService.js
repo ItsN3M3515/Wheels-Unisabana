@@ -110,12 +110,15 @@ class AuditService {
   static async verifyIntegrity({ from, to }) {
     const secret = process.env.AUDIT_HMAC_SECRET || 'dev_audit_secret';
 
-    const fromDate = new Date(`${from}T00:00:00.000Z`);
-    const toDate = new Date(new Date(`${to}T00:00:00.000Z`).getTime() + 24*60*60*1000);
+  // Accept both string dates (YYYY-MM-DD) and Joi-coerced Date objects
+  const fromDate = (from instanceof Date) ? new Date(new Date(from).toISOString().slice(0,10) + 'T00:00:00.000Z') : new Date(`${from}T00:00:00.000Z`);
+  const toDate = (to instanceof Date) ? new Date(new Date(to).toISOString().slice(0,10) + 'T00:00:00.000Z').getTime() + 24*60*60*1000 : new Date(new Date(`${to}T00:00:00.000Z`).getTime() + 24*60*60*1000);
+  // If toDate is a number (ms), normalize to Date
+  const toDateObj = (typeof toDate === 'number') ? new Date(toDate) : toDate;
 
     // Fetch anchors map for days in range and previous day
     const days = [];
-    for (let d = new Date(fromDate); d < toDate; d = new Date(d.getTime() + 24*60*60*1000)) {
+    for (let d = new Date(fromDate); d < toDateObj; d = new Date(d.getTime() + 24*60*60*1000)) {
       days.push(d.toISOString().slice(0,10));
     }
     const prevDay = new Date(fromDate.getTime() - 24*60*60*1000).toISOString().slice(0,10);
@@ -125,7 +128,7 @@ class AuditService {
     for (const a of anchorsDocs) anchorsByDate[a.date] = a;
 
     // Fetch all audit entries in the range sorted by ts asc
-    const entries = await AuditLogModel.find({ ts: { $gte: fromDate, $lt: toDate } }).sort({ ts: 1 }).lean();
+  const entries = await AuditLogModel.find({ ts: { $gte: fromDate, $lt: toDateObj } }).sort({ ts: 1 }).lean();
 
     const breaks = [];
     let prevComputedHash = null;

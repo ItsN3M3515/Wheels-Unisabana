@@ -996,35 +996,69 @@ async function listAudit(req, res, next) {
  */
 async function exportAudit(req, res, next) {
   try {
-    const { entity, entityId, who, from, to } = req.query;
-    const query = {};
-    if (entity) query.entity = entity;
-    if (entityId) query.entityId = entityId;
-    if (who) query.who = who;
-    if (from || to) query.when = {};
-    if (from) query.when.$gte = new Date(from);
-    if (to) query.when.$lte = new Date(to);
+    const { entity, entityId, who, actorId, actorType, action, entityType, correlationId, from, to } = req.query;
 
-    res.setHeader('Content-Type', 'application/x-ndjson');
-    res.setHeader('Content-Disposition', 'attachment; filename="audit_export.ndjson"');
+  if (!from || !to) return res.status(400).json({ code: 'invalid_schema', message: 'Invalid date range', correlationId: req.correlationId });
+  // Support both Joi-coerced Date objects and string date inputs (YYYY-MM-DD)
+  const fromDate = (from instanceof Date) ? new Date(new Date(from).toISOString().slice(0,10) + 'T00:00:00.000Z') : new Date(`${from}T00:00:00.000Z`);
+  const toDate = (to instanceof Date) ? new Date(new Date(to).toISOString().slice(0,10) + 'T23:59:59.999Z') : new Date(`${to}T23:59:59.999Z`);
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()) || fromDate > toDate) {
+      return res.status(400).json({ code: 'invalid_schema', message: 'Invalid date range', correlationId: req.correlationId });
+    }
 
-    const cursor = AuditLogModel.find(query).sort({ when: 1 }).cursor();
+    // Build flexible query supporting legacy and new shapes
+    const and = [];
+    if (action) {
+      const safe = action.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+      and.push({ action: { $regex: `^${safe}` } });
+    }
+    if (actorId) {
+      and.push({ $or: [ { 'actor.id': actorId }, { who: actorId } ] });
+    } else if (who) {
+      and.push({ $or: [ { 'actor.id': who }, { who: who } ] });
+    }
+    if (actorType) and.push({ 'actor.type': actorType });
+    if (entityType) and.push({ $or: [ { 'entity.type': entityType }, { entity: entityType } ] });
+    if (entityId) and.push({ $or: [ { 'entity.id': entityId }, { entityId: entityId } ] });
+    if (correlationId) and.push({ correlationId });
+
+    // time range matches either ts or when fields
+    and.push({ $or: [ { ts: { $gte: fromDate, $lte: toDate } }, { when: { $gte: fromDate, $lte: toDate } } ] });
+
+    const query = and.length > 0 ? { $and: and } : {};
+
+  // Response headers and filename: include requested range
+  res.setHeader('Content-Type', 'application/x-ndjson');
+  const fromKey = (from instanceof Date) ? new Date(from).toISOString().slice(0,10) : String(from);
+  const toKey = (to instanceof Date) ? new Date(to).toISOString().slice(0,10) : String(to);
+  const filename = `audit-${fromKey}_${toKey}.ndjson`;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Prevent server-side timeouts for long exports
+    if (res.setTimeout) res.setTimeout(0);
+
+    const cursor = AuditLogModel.find(query).sort({ ts: 1, when: 1 }).cursor();
+    const { redactPII } = require('../middlewares/structuredLogger');
+
     cursor.on('data', (doc) => {
+      const tsVal = doc.ts || doc.when || null;
+      const tsIso = tsVal ? (tsVal instanceof Date ? tsVal.toISOString() : new Date(tsVal).toISOString()) : null;
+
+      const actor = doc.actor && typeof doc.actor === 'object' ? doc.actor : (doc.who ? { type: null, id: doc.who } : null);
+      const entityObj = (doc.entity && typeof doc.entity === 'object') ? doc.entity : { type: doc.entity || null, id: doc.entityId || null };
+
       const out = {
         id: doc._id.toString(),
+        ts: tsIso,
+        actor,
         action: doc.action,
-        entity: doc.entity,
-        entityId: doc.entityId,
-        who: doc.who,
-        when: doc.when ? new Date(doc.when).toISOString() : null,
-        what: doc.what,
-        why: doc.why,
-        correlationId: doc.correlationId,
-        ip: doc.ip,
-        userAgent: doc.userAgent,
-        prevHash: doc.prevHash,
-        hash: doc.hash
+        entity: entityObj,
+        reason: doc.reason || doc.why || null,
+        delta: redactPII(doc.delta || doc.what || null),
+        correlationId: doc.correlationId || null,
+        prevHash: doc.prevHash || null,
+        hash: doc.hash || null
       };
+
       res.write(JSON.stringify(out) + '\n');
     });
     cursor.on('end', () => {
