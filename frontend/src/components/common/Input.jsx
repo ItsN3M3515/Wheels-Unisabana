@@ -1,8 +1,10 @@
+import React from 'react';
+
 /**
  * Input Component - Wheels UniSabana Design System
  * Reusable text input with label and error message support
  */
-export default function Input({ 
+const Input = React.forwardRef(({ 
   label, 
   error, 
   type = 'text',
@@ -12,7 +14,7 @@ export default function Input({
   rightIcon,
   size = 'md',
   ...props 
-}) {
+}, ref) => {
   const sizes = {
     sm: 'px-3 py-1.5 text-sm',
     md: 'px-4 py-2.5 text-base',
@@ -53,6 +55,7 @@ export default function Input({
         )}
         
         <input
+          ref={ref}
           type={type}
           className={inputClasses}
           {...props}
@@ -79,4 +82,8 @@ export default function Input({
       )}
     </div>
   );
-}
+});
+
+Input.displayName = 'Input';
+
+export default Input;

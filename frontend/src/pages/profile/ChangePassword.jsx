@@ -66,7 +66,6 @@ export default function ChangePassword({ onSuccess }) {
           alignItems: 'start',
           gap: '12px'
         }}>
-          <span style={{ color: '#dc2626', fontSize: '18px' }}>⚠️</span>
           <p style={{ color: '#991b1b', fontSize: '13px', margin: 0, flex: 1 }}>
             {error}
           </p>

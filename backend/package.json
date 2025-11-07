@@ -8,7 +8,10 @@
     "dev": "nodemon src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "db:clear": "node scripts/clear-database.js",
+    "db:clear-fast": "node scripts/clear-db.js",
+    "db:create-admin": "node scripts/create-admin-user.js"
   },
   "keywords": [
     "carpooling",

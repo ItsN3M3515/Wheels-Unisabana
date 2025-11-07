@@ -44,6 +44,9 @@ class ReviewController {
         tags
       });
 
+      // Recompute rating aggregates for the driver after creating a new review
+      await RatingAggregateService.recomputeAggregate(trip.driverId);
+
       return res.status(201).json({
         id: review._id.toString(),
         tripId: review.tripId.toString(),

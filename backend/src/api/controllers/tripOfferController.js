@@ -349,6 +349,114 @@ class TripOfferController {
   }
 
   /**
+   * POST /drivers/trips/:id/start
+   * Start a trip (change status from published to in_progress)
+   */
+  async startTrip(req, res, next) {
+    try {
+      const { id } = req.params;
+      const driverId = req.user.sub;
+
+      console.log(
+        `[TripOfferController] Start trip | tripId: ${id} | driverId: ${driverId} | correlationId: ${req.correlationId}`
+      );
+
+      const startedTrip = await this.tripOfferService.startTrip(id, driverId);
+      const responseDto = TripOfferResponseDto.fromDomain(startedTrip);
+
+      console.log(
+        `[TripOfferController] Trip started | tripId: ${id} | status: ${startedTrip.status} | correlationId: ${req.correlationId}`
+      );
+
+      res.status(200).json(responseDto);
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Start failed | tripId: ${req.params.id} | driverId: ${req.user?.sub} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+
+      if (error.code === 'trip_not_found') {
+        return res.status(404).json({
+          code: 'trip_not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'ownership_violation') {
+        return res.status(403).json({
+          code: 'forbidden_owner',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_status_transition') {
+        return res.status(409).json({
+          code: 'invalid_transition',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  /**
+   * POST /drivers/trips/:id/complete
+   * Complete a trip (change status from in_progress to completed)
+   */
+  async completeTrip(req, res, next) {
+    try {
+      const { id } = req.params;
+      const driverId = req.user.sub;
+
+      console.log(
+        `[TripOfferController] Complete trip | tripId: ${id} | driverId: ${driverId} | correlationId: ${req.correlationId}`
+      );
+
+      const completedTrip = await this.tripOfferService.completeTrip(id, driverId);
+      const responseDto = TripOfferResponseDto.fromDomain(completedTrip);
+
+      console.log(
+        `[TripOfferController] Trip completed | tripId: ${id} | status: ${completedTrip.status} | correlationId: ${req.correlationId}`
+      );
+
+      res.status(200).json(responseDto);
+    } catch (error) {
+      console.error(
+        `[TripOfferController] Complete failed | tripId: ${req.params.id} | driverId: ${req.user?.sub} | error: ${error.message} | correlationId: ${req.correlationId}`
+      );
+
+      if (error.code === 'trip_not_found') {
+        return res.status(404).json({
+          code: 'trip_not_found',
+          message: 'Trip offer not found',
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'ownership_violation') {
+        return res.status(403).json({
+          code: 'forbidden_owner',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      if (error.code === 'invalid_status_transition') {
+        return res.status(409).json({
+          code: 'invalid_transition',
+          message: error.message,
+          correlationId: req.correlationId
+        });
+      }
+
+      next(error);
+    }
+  }
+
+  /**
    * DELETE /drivers/trips/:id
    * Cancel a trip offer (soft delete)
    */

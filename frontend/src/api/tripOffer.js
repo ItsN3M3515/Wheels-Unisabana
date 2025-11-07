@@ -84,12 +84,23 @@ export async function publishTripOffer(tripId) {
 }
 
 /**
- * Complete a trip offer (update status to 'completed')
+ * Start a trip (change status from published to in_progress)
  * @param {string} tripId - Trip offer ID
  * @returns {Promise<Object>} - Updated trip offer
  */
-export async function completeTripOffer(tripId) {
-  return updateTripOffer(tripId, { status: 'completed' });
+export async function startTrip(tripId) {
+  const response = await client.post(`/drivers/trips/${tripId}/start`);
+  return response.data;
+}
+
+/**
+ * Complete a trip (change status from in_progress to completed)
+ * @param {string} tripId - Trip offer ID
+ * @returns {Promise<Object>} - Updated trip offer
+ */
+export async function completeTrip(tripId) {
+  const response = await client.post(`/drivers/trips/${tripId}/complete`);
+  return response.data;
 }
 
 /**

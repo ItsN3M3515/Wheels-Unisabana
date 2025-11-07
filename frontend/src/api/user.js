@@ -5,8 +5,8 @@ import client from './client';
  */
 
 /**
- * Get current user profile (detailed)
- * @returns {Promise<Object>} - Full user profile
+ * Get current user profile
+ * @returns {Promise<Object>} - User profile data
  */
 export async function getMyProfile() {
   const response = await client.get('/api/users/me');
@@ -14,43 +14,33 @@ export async function getMyProfile() {
 }
 
 /**
- * Update current user profile
- * @param {Object} updates - Profile updates
- * @param {string} [updates.firstName] - First name
- * @param {string} [updates.lastName] - Last name
- * @param {string} [updates.phone] - Phone number (E.164 format)
- * @param {File} [updates.profilePhoto] - Profile photo file
- * @returns {Promise<Object>} - Updated user profile
- */
-export async function updateMyProfile(updates) {
-  // If there's a file, use FormData
-  if (updates.profilePhoto) {
-    const formData = new FormData();
-    
-    if (updates.firstName) formData.append('firstName', updates.firstName);
-    if (updates.lastName) formData.append('lastName', updates.lastName);
-    if (updates.phone) formData.append('phone', updates.phone);
-    formData.append('profilePhoto', updates.profilePhoto);
-
-    const response = await client.patch('/api/users/me', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  }
-
-  // Otherwise, send JSON
-  const response = await client.patch('/api/users/me', updates);
-  return response.data;
-}
-
-/**
  * Toggle user role between passenger and driver
- * @returns {Promise<Object>} - Updated user profile with new role
+ * @returns {Promise<Object>} - Updated user data with new role
  */
 export async function toggleRole() {
   const response = await client.post('/api/users/me/toggle-role');
   return response.data;
 }
 
+/**
+ * Report a user from a specific trip
+ * @param {string} userId - User ID to report
+ * @param {Object} reportData - Report data
+ * @param {string} reportData.tripId - Trip ID where the incident occurred
+ * @param {string} reportData.category - Report category (abuse, harassment, fraud, no_show, unsafe_behavior, other)
+ * @param {string} [reportData.reason] - Optional reason (max 500 chars)
+ * @returns {Promise<Object>} - Report response
+ */
+export async function reportUser(userId, reportData) {
+  const response = await client.post(`/api/users/${userId}/report`, reportData);
+  return response.data;
+}
+
+/**
+ * Get all reports made about the current user
+ * @returns {Promise<Object>} - Reports received by the current user
+ */
+export async function getMyReportsReceived() {
+  const response = await client.get('/api/users/me/reports-received');
+  return response.data;
+}

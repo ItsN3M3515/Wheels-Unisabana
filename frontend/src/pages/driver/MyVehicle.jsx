@@ -1,34 +1,54 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { getMyVehicle, updateMyVehicle, deleteMyVehicle } from '../../api/vehicle';
+import { useNavigate, Link } from 'react-router-dom';
+import { getMyVehicle, deleteMyVehicle } from '../../api/vehicle';
 import useAuthStore from '../../store/authStore';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import Alert from '../../components/common/Alert';
-import Modal from '../../components/common/Modal';
+// Components removed - using inline styles instead
+import NotificationBell from '../../components/notifications/NotificationBell';
+import logo from '../../assets/images/UniSabana Logo.png';
 
 export default function MyVehicle() {
   const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [vehiclePhoto, setVehiclePhoto] = useState(null);
-  const [soatPhoto, setSoatPhoto] = useState(null);
-  const [vehiclePreview, setVehiclePreview] = useState(null);
-  const [soatPreview, setSoatPreview] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm();
+  // Form no longer needed since we're not editing
 
   // Load vehicle data
   useEffect(() => {
     loadVehicle();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showProfileMenu && !event.target.closest('.profile-menu-container')) {
+        setShowProfileMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showProfileMenu]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error('[MyVehicle] Logout error:', err);
+    }
+  };
+
+  const getInitials = (firstName, lastName) => {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  };
 
   const loadVehicle = async () => {
     try {
@@ -37,12 +57,6 @@ export default function MyVehicle() {
       const data = await getMyVehicle();
       console.log('[MyVehicle] Vehicle loaded:', data);
       setVehicle(data);
-      
-      // Set form values
-      setValue('brand', data.brand);
-      setValue('model', data.model);
-      setValue('plate', data.plate);
-      setValue('capacity', data.capacity);
     } catch (err) {
       console.error('[MyVehicle] Error loading vehicle:', err);
       if (err.status === 404) {
@@ -55,84 +69,7 @@ export default function MyVehicle() {
     }
   };
 
-  const onSubmit = async (data) => {
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const updates = {
-        brand: data.brand,
-        model: data.model,
-        plate: data.plate.toUpperCase(),
-        capacity: parseInt(data.capacity),
-      };
-
-      if (vehiclePhoto) {
-        updates.vehiclePhoto = vehiclePhoto;
-      }
-
-      if (soatPhoto) {
-        updates.soatPhoto = soatPhoto;
-      }
-
-      const updatedVehicle = await updateMyVehicle(updates);
-      setVehicle(updatedVehicle);
-      setEditing(false);
-      setSuccess('Vehículo actualizado correctamente');
-      setVehiclePhoto(null);
-      setSoatPhoto(null);
-      setVehiclePreview(null);
-      setSoatPreview(null);
-    } catch (err) {
-      if (err.code === 'duplicate_license_plate') {
-        setError('Esta placa ya está registrada por otro vehículo');
-      } else if (err.code === 'invalid_file_type') {
-        setError('Tipo de archivo no válido. Solo se permiten imágenes JPEG, PNG o WebP');
-      } else if (err.code === 'payload_too_large') {
-        setError('Una o más imágenes son muy grandes. El tamaño máximo es 5MB por archivo');
-      } else {
-        setError(err.message || 'Error al actualizar el vehículo');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVehiclePhotoChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setVehiclePhoto(file);
-      const url = URL.createObjectURL(file);
-      setVehiclePreview(url);
-    }
-  };
-
-  const handleSoatPhotoChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSoatPhoto(file);
-      const url = URL.createObjectURL(file);
-      setSoatPreview(url);
-    }
-  };
-
-  const cancelEdit = () => {
-    setEditing(false);
-    setError(null);
-    setSuccess(null);
-    setVehiclePhoto(null);
-    setSoatPhoto(null);
-    setVehiclePreview(null);
-    setSoatPreview(null);
-    reset();
-    if (vehicle) {
-      setValue('brand', vehicle.brand);
-      setValue('model', vehicle.model);
-      setValue('plate', vehicle.plate);
-      setValue('capacity', vehicle.capacity);
-    }
-  };
+  // Edit functionality removed - vehicles cannot be edited, only deleted
 
   const handleDelete = async () => {
     setDeleteLoading(true);
@@ -158,47 +95,339 @@ export default function MyVehicle() {
 
   if (loading && !vehicle) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-4 border-brand-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-neutral-600">Cargando vehículo...</p>
+      <div style={{ minHeight: '100vh', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '3rem',
+            height: '3rem',
+            border: '3px solid #e7e5e4',
+            borderTop: '3px solid #032567',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }}></div>
+          <p style={{ color: '#57534e', fontFamily: 'Inter, sans-serif' }}>Cargando vehículo...</p>
         </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
   if (!vehicle && !loading) {
     return (
-      <div className="min-h-screen bg-neutral-50">
-        <header className="bg-white border-b border-neutral-200">
-          <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-            <button
-              onClick={() => navigate(-1)}
-              className="text-neutral-600 hover:text-neutral-900 flex items-center gap-2"
+      <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
+        {/* Navbar */}
+        <header style={{
+          width: '100%',
+          borderBottom: '1px solid #e7e5e4',
+          backgroundColor: 'white',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10
+        }}>
+          <div style={{
+            maxWidth: '1280px',
+            margin: '0 auto',
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <Link 
+              to="/dashboard" 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                textDecoration: 'none',
+                transition: 'opacity 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
             >
-              <span>←</span>
-              <span>Volver</span>
-            </button>
-            <h1 className="text-xl font-bold text-neutral-900">Mi Vehículo</h1>
-            <div className="w-20"></div>
+              <img 
+                src={logo} 
+                alt="Wheels UniSabana Logo" 
+                style={{ 
+                  height: '4rem', 
+                  width: 'auto',
+                  objectFit: 'contain'
+                }}
+              />
+              <span style={{
+                fontSize: '20px',
+                fontWeight: 'normal',
+                color: '#1c1917',
+                fontFamily: 'Inter, sans-serif'
+              }}>
+                Wheels UniSabana
+              </span>
+            </Link>
+
+            {/* Center: Navigation Links */}
+            <nav style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '32px'
+            }}>
+              <Link
+                to="/my-trips"
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  color: '#1c1917',
+                  textDecoration: 'none',
+                  transition: 'color 0.2s',
+                  fontFamily: 'Inter, sans-serif'
+                }}
+                onMouseEnter={(e) => e.target.style.color = '#032567'}
+                onMouseLeave={(e) => e.target.style.color = '#1c1917'}
+              >
+                Mis viajes
+              </Link>
+              
+              <Link
+                to="/reports"
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: '500',
+                  color: '#1c1917',
+                  textDecoration: 'none',
+                  transition: 'color 0.2s',
+                  fontFamily: 'Inter, sans-serif'
+                }}
+                onMouseEnter={(e) => e.target.style.color = '#032567'}
+                onMouseLeave={(e) => e.target.style.color = '#1c1917'}
+              >
+                Reportes
+              </Link>
+            </nav>
+
+            {/* Right: Notifications + Role Status + Profile */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px'
+            }}>
+              {/* Notifications */}
+              {user && (
+                <NotificationBell />
+              )}
+
+              {/* Role indicator */}
+              <div style={{
+                padding: '6px 16px',
+                backgroundColor: '#032567',
+                color: 'white',
+                border: '2px solid #032567',
+                borderRadius: '20px',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                fontFamily: 'Inter, sans-serif'
+              }}>
+                Conductor
+              </div>
+
+              {/* Profile button with menu */}
+              <div className="profile-menu-container" style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  style={{
+                    width: '45px',
+                    height: '45px',
+                    borderRadius: '50%',
+                    backgroundColor: '#032567',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '1rem',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontFamily: 'Inter, sans-serif',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                  onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                >
+                  {getInitials(user?.firstName, user?.lastName)}
+                </button>
+
+                {showProfileMenu && (
+                  <>
+                    <div
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 10
+                      }}
+                      onClick={() => setShowProfileMenu(false)}
+                    />
+                    <div style={{
+                      position: 'absolute',
+                      right: 0,
+                      marginTop: '8px',
+                      width: '220px',
+                      backgroundColor: 'white',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                      border: '1px solid #e7e5e4',
+                      padding: '8px 0',
+                      zIndex: 20
+                    }}>
+                      {/* User info */}
+                      <div style={{
+                        padding: '12px 16px',
+                        borderBottom: '1px solid #e7e5e4'
+                      }}>
+                        <p style={{
+                          fontSize: '0.9rem',
+                          fontWeight: '600',
+                          color: '#1c1917',
+                          margin: 0,
+                          fontFamily: 'Inter, sans-serif'
+                        }}>
+                          {user?.firstName} {user?.lastName}
+                        </p>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: '#57534e',
+                          margin: '4px 0 0 0',
+                          fontFamily: 'Inter, sans-serif'
+                        }}>
+                          {user?.corporateEmail}
+                        </p>
+                      </div>
+
+                      {/* Menu items */}
+                      <div style={{ padding: '4px 0' }}>
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            navigate('/profile');
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 16px',
+                            textAlign: 'left',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: '#1c1917',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            fontFamily: 'Inter, sans-serif',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                          Mi perfil
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            navigate('/driver/my-vehicle');
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 16px',
+                            textAlign: 'left',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: '#1c1917',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            fontFamily: 'Inter, sans-serif',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                          Mi vehículo
+                        </button>
+                        <button
+                          onClick={handleLogout}
+                          style={{
+                            width: '100%',
+                            padding: '10px 16px',
+                            textAlign: 'left',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: '#dc2626',
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            fontFamily: 'Inter, sans-serif',
+                            transition: 'background-color 0.2s',
+                            borderTop: '1px solid #e7e5e4',
+                            marginTop: '4px'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#fef2f2'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                          Cerrar sesión
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </header>
 
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-8 text-center">
-            <div className="text-6xl mb-4">🚗</div>
-            <h2 className="text-2xl font-bold text-neutral-900 mb-2">
+        <div style={{
+          maxWidth: '1280px',
+          margin: '0 auto',
+          padding: '48px 24px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            border: '1px solid #e7e5e4',
+            padding: '48px',
+            textAlign: 'center'
+          }}>
+            <h2 style={{
+              fontSize: '1.8rem',
+              fontWeight: 'normal',
+              color: '#1c1917',
+              marginBottom: '8px',
+              fontFamily: 'Inter, sans-serif'
+            }}>
               No tienes un vehículo registrado
             </h2>
-            <p className="text-neutral-600 mb-6">
+            <p style={{
+              color: '#57534e',
+              marginBottom: '24px',
+              fontSize: '1rem',
+              fontFamily: 'Inter, sans-serif'
+            }}>
               Registra tu vehículo para poder publicar viajes
             </p>
-            <Button
-              variant="primary"
+            <button
               onClick={() => navigate('/driver/register-vehicle')}
+              style={{
+                padding: '12px 24px',
+                fontSize: '1rem',
+                fontWeight: 'normal',
+                color: 'white',
+                backgroundColor: '#032567',
+                border: 'none',
+                borderRadius: '25px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                fontFamily: 'Inter, sans-serif',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = '#1A6EFF'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = '#032567'}
             >
               Registrar vehículo
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -206,211 +435,636 @@ export default function MyVehicle() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      {/* Header */}
-      <header className="bg-white border-b border-neutral-200">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-neutral-600 hover:text-neutral-900 flex items-center gap-2"
+    <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
+      {/* Navbar */}
+      <header style={{
+        width: '100%',
+        borderBottom: '1px solid #e7e5e4',
+        backgroundColor: 'white',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10
+      }}>
+        <div style={{
+          maxWidth: '1280px',
+          margin: '0 auto',
+          padding: '16px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Link 
+            to="/dashboard" 
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              textDecoration: 'none',
+              transition: 'opacity 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
-            <span>←</span>
-            <span>Volver</span>
-          </button>
-          <h1 className="text-xl font-bold text-neutral-900">Mi Vehículo</h1>
-          <div className="w-20"></div>
+            <img 
+              src={logo} 
+              alt="Wheels UniSabana Logo" 
+              style={{ 
+                height: '4rem', 
+                width: 'auto',
+                objectFit: 'contain'
+              }}
+            />
+            <span style={{
+              fontSize: '20px',
+              fontWeight: 'normal',
+              color: '#1c1917',
+              fontFamily: 'Inter, sans-serif'
+            }}>
+              Wheels UniSabana
+            </span>
+          </Link>
+
+          {/* Center: Navigation Links */}
+          <nav style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '32px'
+          }}>
+            <Link
+              to="/my-trips"
+              style={{
+                fontSize: '1rem',
+                fontWeight: '500',
+                color: '#1c1917',
+                textDecoration: 'none',
+                transition: 'color 0.2s',
+                fontFamily: 'Inter, sans-serif'
+              }}
+              onMouseEnter={(e) => e.target.style.color = '#032567'}
+              onMouseLeave={(e) => e.target.style.color = '#1c1917'}
+            >
+              Mis viajes
+            </Link>
+            
+            <Link
+              to="/reports"
+              style={{
+                fontSize: '1rem',
+                fontWeight: '500',
+                color: '#1c1917',
+                textDecoration: 'none',
+                transition: 'color 0.2s',
+                fontFamily: 'Inter, sans-serif'
+              }}
+              onMouseEnter={(e) => e.target.style.color = '#032567'}
+              onMouseLeave={(e) => e.target.style.color = '#1c1917'}
+            >
+              Reportes
+            </Link>
+          </nav>
+
+          {/* Right: Notifications + Role Status + Profile */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px'
+          }}>
+            {/* Notifications */}
+            {user && (
+              <NotificationBell />
+            )}
+
+            {/* Role indicator */}
+            <div style={{
+              padding: '6px 16px',
+              backgroundColor: '#032567',
+              color: 'white',
+              border: '2px solid #032567',
+              borderRadius: '20px',
+              fontSize: '0.9rem',
+              fontWeight: '500',
+              fontFamily: 'Inter, sans-serif'
+            }}>
+              Conductor
+            </div>
+
+            {/* Profile button with menu */}
+            <div className="profile-menu-container" style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                style={{
+                  width: '45px',
+                  height: '45px',
+                  borderRadius: '50%',
+                  backgroundColor: '#032567',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontFamily: 'Inter, sans-serif',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}
+                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              >
+                {getInitials(user?.firstName, user?.lastName)}
+              </button>
+
+              {showProfileMenu && (
+                <>
+                  <div
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      zIndex: 10
+                    }}
+                    onClick={() => setShowProfileMenu(false)}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    right: 0,
+                    marginTop: '8px',
+                    width: '220px',
+                    backgroundColor: 'white',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                    border: '1px solid #e7e5e4',
+                    padding: '8px 0',
+                    zIndex: 20
+                  }}>
+                    {/* User info */}
+                    <div style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #e7e5e4'
+                    }}>
+                      <p style={{
+                        fontSize: '0.9rem',
+                        fontWeight: '600',
+                        color: '#1c1917',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
+                        {user?.firstName} {user?.lastName}
+                      </p>
+                      <p style={{
+                        fontSize: '0.75rem',
+                        color: '#57534e',
+                        margin: '4px 0 0 0',
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
+                        {user?.corporateEmail}
+                      </p>
+                    </div>
+
+                    {/* Menu items */}
+                    <div style={{ padding: '4px 0' }}>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          navigate('/profile');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          textAlign: 'left',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#1c1917',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          fontFamily: 'Inter, sans-serif',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      >
+                        Mi perfil
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          navigate('/driver/my-vehicle');
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          textAlign: 'left',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#032567',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          fontFamily: 'Inter, sans-serif',
+                          transition: 'background-color 0.2s',
+                          fontWeight: '600',
+                          backgroundColor: '#f0f9ff'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#e0f2fe'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#f0f9ff'}
+                      >
+                        Mi vehículo
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        style={{
+                          width: '100%',
+                          padding: '10px 16px',
+                          textAlign: 'left',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#dc2626',
+                          fontSize: '0.9rem',
+                          cursor: 'pointer',
+                          fontFamily: 'Inter, sans-serif',
+                          transition: 'background-color 0.2s',
+                          borderTop: '1px solid #e7e5e4',
+                          marginTop: '4px'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#fef2f2'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      >
+                        Cerrar sesión
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Content */}
+      <div style={{
+        maxWidth: '1280px',
+        margin: '0 auto',
+        padding: '48px 24px'
+      }}>
+        {/* Page Title */}
+        <h1 style={{
+          fontSize: '2.5rem',
+          fontWeight: 'normal',
+          color: '#1c1917',
+          marginBottom: '32px',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          Mi Vehículo
+        </h1>
+
         {/* Alerts */}
         {error && (
-          <div className="mb-6">
-            <Alert type="error" message={error} onClose={() => setError(null)} />
+          <div style={{
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fca5a5',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'start',
+            gap: '12px'
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: '#991b1b', fontSize: '14px', margin: 0, fontFamily: 'Inter, sans-serif' }}>
+                {error}
+              </p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#991b1b',
+                cursor: 'pointer',
+                padding: '0',
+                fontSize: '18px',
+                lineHeight: '1'
+              }}
+            >
+              ×
+            </button>
           </div>
         )}
         {success && (
-          <div className="mb-6">
-            <Alert type="success" message={success} onClose={() => setSuccess(null)} />
+          <div style={{
+            backgroundColor: '#f0fdf4',
+            border: '1px solid #86efac',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'start',
+            gap: '12px'
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: '#15803d', fontSize: '14px', margin: 0, fontFamily: 'Inter, sans-serif' }}>
+                {success}
+              </p>
+            </div>
+            <button
+              onClick={() => setSuccess(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#15803d',
+                cursor: 'pointer',
+                padding: '0',
+                fontSize: '18px',
+                lineHeight: '1'
+              }}
+            >
+              ×
+            </button>
           </div>
         )}
 
         {/* Vehicle Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-neutral-200 p-8">
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          border: '1px solid #e7e5e4',
+          padding: '32px'
+        }}>
           {/* Vehicle Photos */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '24px',
+            marginBottom: '32px'
+          }}>
             {/* Vehicle Photo */}
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-2">
+              <label style={{
+                display: 'block',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#57534e',
+                marginBottom: '8px',
+                fontFamily: 'Inter, sans-serif'
+              }}>
                 Foto del vehículo
               </label>
-              <div className="relative aspect-video bg-neutral-100 rounded-lg overflow-hidden">
-                {vehiclePreview ? (
-                  <img 
-                    src={vehiclePreview} 
-                    alt="Vehicle preview" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : vehicle?.vehiclePhotoUrl ? (
-                  <img 
-                    src={vehicle.vehiclePhotoUrl} 
-                    alt="Vehicle" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">🚗</div>
-                      <p className="text-sm text-neutral-500">Sin foto</p>
-                    </div>
-                  </div>
-                )}
-                {editing && (
-                  <label className="absolute bottom-3 right-3 px-4 py-2 bg-brand-600 text-white rounded-lg cursor-pointer hover:bg-brand-700 transition-colors text-sm font-medium">
-                    {vehiclePreview || vehicle?.vehiclePhotoUrl ? 'Cambiar' : 'Subir'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleVehiclePhotoChange}
-                      className="hidden"
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                paddingBottom: '56.25%', // 16:9 aspect ratio
+                backgroundColor: '#f5f5f4',
+                borderRadius: '12px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {vehicle?.vehiclePhotoUrl ? (
+                    <img 
+                      src={vehicle.vehiclePhotoUrl} 
+                      alt="Vehicle" 
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
                     />
-                  </label>
-                )}
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%'
+                    }}>
+                      <p style={{
+                        fontSize: '0.85rem',
+                        color: '#78716c',
+                        fontFamily: 'Inter, sans-serif'
+                      }}>Sin foto</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {/* SOAT Photo */}
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-2">
+              <label style={{
+                display: 'block',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#57534e',
+                marginBottom: '8px',
+                fontFamily: 'Inter, sans-serif'
+              }}>
                 Foto del SOAT
               </label>
-              <div className="relative aspect-video bg-neutral-100 rounded-lg overflow-hidden">
-                {soatPreview ? (
-                  <img 
-                    src={soatPreview} 
-                    alt="SOAT preview" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : vehicle?.soatPhotoUrl ? (
-                  <img 
-                    src={vehicle.soatPhotoUrl} 
-                    alt="SOAT" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">📄</div>
-                      <p className="text-sm text-neutral-500">Sin foto</p>
-                    </div>
-                  </div>
-                )}
-                {editing && (
-                  <label className="absolute bottom-3 right-3 px-4 py-2 bg-brand-600 text-white rounded-lg cursor-pointer hover:bg-brand-700 transition-colors text-sm font-medium">
-                    {soatPreview || vehicle?.soatPhotoUrl ? 'Cambiar' : 'Subir'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleSoatPhotoChange}
-                      className="hidden"
+              <div style={{
+                position: 'relative',
+                width: '100%',
+                paddingBottom: '56.25%', // 16:9 aspect ratio
+                backgroundColor: '#f5f5f4',
+                borderRadius: '12px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {vehicle?.soatPhotoUrl ? (
+                    <img 
+                      src={vehicle.soatPhotoUrl} 
+                      alt="SOAT" 
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
                     />
-                  </label>
-                )}
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: '100%'
+                    }}>
+                      <p style={{
+                        fontSize: '0.85rem',
+                        color: '#78716c',
+                        fontFamily: 'Inter, sans-serif'
+                      }}>Sin foto</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="space-y-5">
-              {/* Plate */}
-              <Input
-                label="Placa del vehículo"
-                placeholder="ABC123"
-                disabled={!editing}
-                error={errors.plate?.message}
-                {...register('plate', {
-                  required: 'La placa es requerida',
-                  pattern: {
-                    value: /^[A-Z]{3}\d{3}$/i,
-                    message: 'Formato inválido. Ej: ABC123',
-                  },
-                })}
+          {/* Vehicle Information - Read Only */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Plate */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#57534e',
+                marginBottom: '6px',
+                fontFamily: 'Inter, sans-serif'
+              }}>
+                Placa del vehículo
+              </label>
+              <input
+                type="text"
+                value={vehicle?.plate || ''}
+                disabled
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid #e7e5e4',
+                  fontSize: '1rem',
+                  color: '#57534e',
+                  backgroundColor: '#f5f5f4',
+                  fontFamily: 'Inter, sans-serif',
+                  cursor: 'not-allowed'
+                }}
               />
+            </div>
 
-              {/* Brand and Model */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input
-                  label="Marca"
-                  placeholder="Toyota"
-                  disabled={!editing}
-                  error={errors.brand?.message}
-                  {...register('brand', {
-                    required: 'La marca es requerida',
-                    minLength: {
-                      value: 2,
-                      message: 'Mínimo 2 caracteres',
-                    },
-                  })}
-                />
-
-                <Input
-                  label="Modelo"
-                  placeholder="Corolla"
-                  disabled={!editing}
-                  error={errors.model?.message}
-                  {...register('model', {
-                    required: 'El modelo es requerido',
-                    minLength: {
-                      value: 2,
-                      message: 'Mínimo 2 caracteres',
-                    },
-                  })}
-                />
-              </div>
-
-              {/* Capacity */}
+            {/* Brand and Model */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px'
+            }}>
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-                  Capacidad de pasajeros
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  color: '#57534e',
+                  marginBottom: '6px',
+                  fontFamily: 'Inter, sans-serif'
+                }}>
+                  Marca
                 </label>
-                {editing ? (
-                  <select
-                    className="w-full px-4 py-2.5 rounded-lg border border-neutral-300 focus:ring-brand-600 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors"
-                    {...register('capacity', {
-                      required: 'La capacidad es requerida',
-                    })}
-                  >
-                    <option value="">Selecciona</option>
-                    <option value="1">1 pasajero</option>
-                    <option value="2">2 pasajeros</option>
-                    <option value="3">3 pasajeros</option>
-                    <option value="4">4 pasajeros</option>
-                    <option value="5">5 pasajeros</option>
-                    <option value="6">6 pasajeros</option>
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={`${vehicle?.capacity || 0} pasajero${vehicle?.capacity > 1 ? 's' : ''}`}
-                    disabled
-                    className="w-full px-4 py-2.5 rounded-lg border border-neutral-300 bg-neutral-100 text-neutral-700 cursor-not-allowed"
-                  />
-                )}
-                {errors.capacity && (
-                  <p className="mt-1.5 text-sm text-red-600">
-                    {errors.capacity.message}
-                  </p>
-                )}
+                <input
+                  type="text"
+                  value={vehicle?.brand || ''}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '1rem',
+                    color: '#57534e',
+                    backgroundColor: '#f5f5f4',
+                    fontFamily: 'Inter, sans-serif',
+                    cursor: 'not-allowed'
+                  }}
+                />
               </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.9rem',
+                  fontWeight: '500',
+                  color: '#57534e',
+                  marginBottom: '6px',
+                  fontFamily: 'Inter, sans-serif'
+                }}>
+                  Modelo
+                </label>
+                <input
+                  type="text"
+                  value={vehicle?.model || ''}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid #e7e5e4',
+                    fontSize: '1rem',
+                    color: '#57534e',
+                    backgroundColor: '#f5f5f4',
+                    fontFamily: 'Inter, sans-serif',
+                    cursor: 'not-allowed'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Capacity */}
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '0.9rem',
+                fontWeight: '500',
+                color: '#57534e',
+                marginBottom: '6px',
+                fontFamily: 'Inter, sans-serif'
+              }}>
+                Capacidad de pasajeros
+              </label>
+              <input
+                type="text"
+                value={`${vehicle?.capacity || 0} pasajero${vehicle?.capacity > 1 ? 's' : ''}`}
+                disabled
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  borderRadius: '12px',
+                  border: '1px solid #e7e5e4',
+                  fontSize: '1rem',
+                  color: '#57534e',
+                  backgroundColor: '#f5f5f4',
+                  fontFamily: 'Inter, sans-serif',
+                  cursor: 'not-allowed'
+                }}
+              />
+            </div>
 
               {/* Metadata */}
               {vehicle && (
-                <div className="border-t border-neutral-200 pt-5 mt-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div style={{
+                  borderTop: '1px solid #e7e5e4',
+                  paddingTop: '20px',
+                  marginTop: '20px'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '16px'
+                  }}>
                     <div>
-                      <p className="text-neutral-600">Registrado el:</p>
-                      <p className="font-medium text-neutral-900">
+                      <p style={{
+                        fontSize: '0.85rem',
+                        color: '#57534e',
+                        margin: '0 0 4px 0',
+                        fontFamily: 'Inter, sans-serif'
+                      }}>Registrado el:</p>
+                      <p style={{
+                        fontSize: '0.95rem',
+                        fontWeight: '500',
+                        color: '#1c1917',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
                         {new Date(vehicle.createdAt).toLocaleDateString('es-CO', {
                           year: 'numeric',
                           month: 'long',
@@ -419,8 +1073,19 @@ export default function MyVehicle() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-neutral-600">Última actualización:</p>
-                      <p className="font-medium text-neutral-900">
+                      <p style={{
+                        fontSize: '0.85rem',
+                        color: '#57534e',
+                        margin: '0 0 4px 0',
+                        fontFamily: 'Inter, sans-serif'
+                      }}>Última actualización:</p>
+                      <p style={{
+                        fontSize: '0.95rem',
+                        fontWeight: '500',
+                        color: '#1c1917',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
                         {new Date(vehicle.updatedAt).toLocaleDateString('es-CO', {
                           year: 'numeric',
                           month: 'long',
@@ -432,67 +1097,203 @@ export default function MyVehicle() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              <div className="flex flex-col gap-3 pt-4">
-                {!editing ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      onClick={() => setEditing(true)}
-                      className="w-full"
-                    >
-                      Editar vehículo
-                    </Button>
-                    
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => setShowDeleteModal(true)}
-                      className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      Eliminar vehículo
-                    </Button>
-                  </>
-                ) : (
-                  <div className="flex gap-3">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={cancelEdit}
-                      disabled={loading}
-                      className="flex-1"
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      loading={loading}
-                      disabled={loading}
-                      className="flex-1"
-                    >
-                      Guardar cambios
-                    </Button>
-                  </div>
-                )}
+              {/* Action button */}
+              <div style={{
+                paddingTop: '16px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(true)}
+                  style={{
+                    width: '100%',
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 'normal',
+                    color: '#dc2626',
+                    backgroundColor: 'white',
+                    border: '2px solid #dc2626',
+                    borderRadius: '25px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    fontFamily: 'Inter, sans-serif'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.backgroundColor = '#fef2f2';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.backgroundColor = 'white';
+                  }}
+                >
+                  Eliminar vehículo
+                </button>
               </div>
             </div>
-          </form>
         </div>
 
         {/* Delete Modal */}
-        <Modal
-          isOpen={showDeleteModal}
-          onClose={() => setShowDeleteModal(false)}
-          onConfirm={handleDelete}
-          loading={deleteLoading}
-          title="Eliminar vehículo"
-          message="¿Estás seguro de que quieres eliminar este vehículo? Esta acción no se puede deshacer. No podrás publicar viajes hasta que registres otro vehículo."
-          confirmText="Sí, eliminar vehículo"
-          cancelText="Cancelar"
-        />
+        {showDeleteModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 50,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)'
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !deleteLoading) {
+                setShowDeleteModal(false);
+              }
+            }}
+          >
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              maxWidth: '500px',
+              width: '100%',
+              padding: '24px'
+            }}>
+              {/* Header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'start',
+                justifyContent: 'space-between',
+                marginBottom: '16px'
+              }}>
+                <h3 style={{
+                  fontSize: '1.25rem',
+                  fontWeight: '600',
+                  color: '#1c1917',
+                  margin: 0,
+                  fontFamily: 'Inter, sans-serif',
+                  flex: 1
+                }}>
+                  Eliminar vehículo
+                </h3>
+                {!deleteLoading && (
+                  <button
+                    onClick={() => setShowDeleteModal(false)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#57534e',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '8px',
+                      transition: 'background-color 0.2s',
+                      fontSize: '20px',
+                      lineHeight: '1'
+                    }}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Content */}
+              <div style={{ marginBottom: '24px' }}>
+                <p style={{
+                  color: '#57534e',
+                  fontSize: '1rem',
+                  margin: 0,
+                  fontFamily: 'Inter, sans-serif',
+                  lineHeight: '1.5'
+                }}>
+                  ¿Estás seguro de que quieres eliminar este vehículo? Esta acción no se puede deshacer. No podrás publicar viajes hasta que registres otro vehículo.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleteLoading}
+                  style={{
+                    flex: 1,
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 'normal',
+                    color: '#032567',
+                    backgroundColor: 'white',
+                    border: '2px solid #032567',
+                    borderRadius: '25px',
+                    cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    fontFamily: 'Inter, sans-serif',
+                    opacity: deleteLoading ? 0.5 : 1
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!deleteLoading) e.target.style.backgroundColor = '#f8fafc';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!deleteLoading) e.target.style.backgroundColor = 'white';
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteLoading}
+                  style={{
+                    flex: 1,
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 'normal',
+                    color: 'white',
+                    backgroundColor: '#dc2626',
+                    border: 'none',
+                    borderRadius: '25px',
+                    cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    fontFamily: 'Inter, sans-serif',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    opacity: deleteLoading ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!deleteLoading) e.target.style.backgroundColor = '#b91c1c';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!deleteLoading) e.target.style.backgroundColor = '#dc2626';
+                  }}
+                >
+                  {deleteLoading ? (
+                    <>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        border: '2px solid rgba(255,255,255,0.3)',
+                        borderTop: '2px solid white',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite'
+                      }}></div>
+                      <span>Eliminando...</span>
+                    </>
+                  ) : (
+                    'Sí, eliminar vehículo'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -190,7 +190,6 @@ export default function CreateTripOffer() {
           padding: '48px 24px',
           textAlign: 'center'
         }}>
-          <div style={{ fontSize: '4rem', marginBottom: '24px' }}>⚠️</div>
           <h2 style={{
             fontSize: '2rem',
             fontWeight: 'normal',
@@ -337,7 +336,6 @@ export default function CreateTripOffer() {
             alignItems: 'start',
             gap: '12px'
           }}>
-            <span style={{ color: '#dc2626', fontSize: '20px' }}>⚠️</span>
             <div style={{ flex: 1 }}>
               <p style={{ color: '#991b1b', fontSize: '14px', margin: 0 }}>
                 {error}
@@ -398,7 +396,6 @@ export default function CreateTripOffer() {
             Tu vehículo
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ fontSize: '3rem' }}>🚗</div>
             <div>
               <p style={{
                 fontSize: '1.1rem',

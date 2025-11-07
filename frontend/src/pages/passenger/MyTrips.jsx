@@ -3,21 +3,22 @@ import { useNavigate, Link } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
 import { getMyBookings, cancelBooking } from '../../api/booking';
 import { getMyReviewForTrip } from '../../api/review';
-import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
+import ReportUserModal from '../../components/users/ReportUserModal';
+import Navbar from '../../components/common/Navbar';
 
 export default function MyTrips() {
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [activeTab, setActiveTab] = useState('reserved'); // 'in-progress', 'reserved', 'completed', 'canceled'
   const [reviewsMap, setReviewsMap] = useState({}); // Map of tripId -> review
+  const [showReportModal, setShowReportModal] = useState(null); // {userId, userName, tripId}
 
   useEffect(() => {
     console.log('[MyTrips] Component mounted, loading bookings...');
@@ -34,32 +35,27 @@ export default function MyTrips() {
     return new Date(departureDate) < new Date();
   };
 
-  // Categorize bookings
-  // En progreso: Viajes aceptados que ya iniciaron pero aún no terminaron
+  // Categorize bookings based on trip status (not dates)
+  // En progreso: Viajes aceptados donde el viaje tiene status 'in_progress'
   const inProgressBookings = bookings.filter(b => {
     if (!b || !b.trip) return false;
     if (b.status !== 'accepted') return false;
-    const now = new Date();
-    const departureAt = new Date(b.trip.departureAt);
-    const estimatedArrivalAt = b.trip.estimatedArrivalAt ? new Date(b.trip.estimatedArrivalAt) : null;
-    
-    // Ya inició (departureAt en el pasado) pero aún no terminó (estimatedArrivalAt en el futuro o no existe)
-    return departureAt <= now && (estimatedArrivalAt === null || estimatedArrivalAt > now);
+    return b.trip.status === 'in_progress';
   });
 
-  // Reservados: Pendientes O aceptados que aún no han iniciado (departureAt en el futuro)
+  // Reservados: Pendientes O aceptados donde el viaje está 'published' (aún no iniciado)
   const reservedBookings = bookings.filter(b => {
-    if (!b) return false;
+    if (!b || !b.trip) return false;
     if (b.status === 'pending') return true;
-    if (b.status === 'accepted' && b.trip && isTripUpcoming(b.trip.departureAt)) return true;
+    if (b.status === 'accepted' && b.trip.status === 'published') return true;
     return false;
   });
 
-  // Completados: Viajes aceptados que ya terminaron completamente (estimatedArrivalAt en el pasado)
+  // Completados: Viajes aceptados donde el viaje tiene status 'completed'
   const completedBookings = bookings.filter(b => {
-    if (!b || !b.trip || !b.trip.estimatedArrivalAt) return false;
+    if (!b || !b.trip) return false;
     if (b.status !== 'accepted') return false;
-    return isTripPast(b.trip.estimatedArrivalAt);
+    return b.trip.status === 'completed';
   });
 
   const canceledBookings = bookings.filter(b => {
@@ -171,15 +167,6 @@ export default function MyTrips() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (err) {
-      console.error('[MyTrips] Logout error:', err);
-    }
-  };
-
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('es-CO', {
@@ -201,22 +188,36 @@ export default function MyTrips() {
   };
 
   const getStatusBadge = (status, booking) => {
-    // Determine badge text based on status and active tab
+    // Determine badge text based on booking status and trip status
+    // Priority: trip.status > booking.status
     let badgeText = '';
     let badgeBg = '#e0f2fe';
     let badgeColor = '#032567';
 
-    if (status === 'pending') {
-      badgeText = 'Pendiente';
-    } else if (status === 'accepted') {
-      // Show "En progreso" in the in-progress tab, "Confirmado" in reserved tab, or "Completado" in completed tab
-      if (activeTab === 'in-progress') {
+    // First check trip status for accepted bookings (this is the source of truth)
+    if (status === 'accepted' && booking?.trip?.status) {
+      if (booking.trip.status === 'in_progress') {
         badgeText = 'En progreso';
-      } else if (activeTab === 'completed') {
+        badgeBg = '#e0f2fe';
+        badgeColor = '#032567';
+      } else if (booking.trip.status === 'completed') {
         badgeText = 'Completado';
-      } else {
+        badgeBg = '#e0f2fe';
+        badgeColor = '#032567';
+      } else if (booking.trip.status === 'published') {
         badgeText = 'Confirmado';
+        badgeBg = '#e0f2fe';
+        badgeColor = '#032567';
+      } else {
+        // Fallback for other trip statuses
+        badgeText = 'Confirmado';
+        badgeBg = '#e0f2fe';
+        badgeColor = '#032567';
       }
+    } else if (status === 'pending') {
+      badgeText = 'Pendiente';
+      badgeBg = '#e0f2fe';
+      badgeColor = '#032567';
     } else if (['declined', 'canceled_by_passenger', 'canceled_by_platform', 'expired', 'declined_auto'].includes(status)) {
       badgeBg = '#f5f5f4';
       badgeColor = '#57534e';
@@ -231,6 +232,8 @@ export default function MyTrips() {
       }
     } else {
       badgeText = 'Pendiente';
+      badgeBg = '#e0f2fe';
+      badgeColor = '#032567';
     }
 
     return (
@@ -248,9 +251,6 @@ export default function MyTrips() {
     );
   };
 
-  const getInitials = (firstName, lastName) => {
-    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
-  };
 
   // Debug logs
   console.log('[MyTrips] Total bookings:', bookings.length);
@@ -331,216 +331,7 @@ export default function MyTrips() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'white' }}>
       {/* Navbar */}
-      <header style={{
-        width: '100%',
-        borderBottom: '1px solid #e7e5e4',
-        backgroundColor: 'white',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10
-      }}>
-        <div style={{
-          maxWidth: '1280px',
-          margin: '0 auto',
-          padding: '16px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <Link 
-            to="/dashboard" 
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              textDecoration: 'none',
-              transition: 'opacity 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-          >
-            <img 
-              src={logo} 
-              alt="Wheels UniSabana Logo" 
-              style={{ 
-                height: '4rem', 
-                width: 'auto',
-                objectFit: 'contain'
-              }}
-            />
-            <span style={{
-              fontSize: '20px',
-              fontWeight: 'normal',
-              color: '#1c1917',
-              fontFamily: 'Inter, sans-serif'
-            }}>
-              Wheels UniSabana
-            </span>
-          </Link>
-
-          {/* Center: Navigation Links */}
-          <nav style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '32px'
-          }}>
-            <Link
-              to="/my-trips"
-              style={{
-                fontSize: '1rem',
-                fontWeight: '500',
-                color: '#032567',
-                textDecoration: 'none',
-                transition: 'color 0.2s',
-                fontFamily: 'Inter, sans-serif',
-                borderBottom: '2px solid #032567'
-              }}
-            >
-              Mis viajes
-            </Link>
-            
-            <Link
-              to="/reports"
-              style={{
-                fontSize: '1rem',
-                fontWeight: '500',
-                color: '#1c1917',
-                textDecoration: 'none',
-                transition: 'color 0.2s',
-                fontFamily: 'Inter, sans-serif'
-              }}
-              onMouseEnter={(e) => e.target.style.color = '#032567'}
-              onMouseLeave={(e) => e.target.style.color = '#1c1917'}
-            >
-              Reportes
-            </Link>
-            
-            <Link
-              to="/search"
-              style={{
-                fontSize: '1rem',
-                fontWeight: '500',
-                color: '#1c1917',
-                textDecoration: 'none',
-                transition: 'color 0.2s',
-                fontFamily: 'Inter, sans-serif'
-              }}
-              onMouseEnter={(e) => e.target.style.color = '#032567'}
-              onMouseLeave={(e) => e.target.style.color = '#1c1917'}
-            >
-              Buscar viajes
-            </Link>
-          </nav>
-
-          {/* Right: Role Status + Profile */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '16px'
-          }}>
-            {/* Role indicator */}
-            <div style={{
-              padding: '6px 16px',
-              backgroundColor: 'white',
-              color: '#032567',
-              border: '2px solid #032567',
-              borderRadius: '20px',
-              fontSize: '0.9rem',
-              fontWeight: '500',
-              fontFamily: 'Inter, sans-serif'
-            }}>
-              Pasajero
-            </div>
-
-            {/* Profile button with menu */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                style={{
-                  width: '45px',
-                  height: '45px',
-                  borderRadius: '50%',
-                  backgroundColor: '#032567',
-                  border: 'none',
-                  color: 'white',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontFamily: 'Inter, sans-serif',
-                  transition: 'all 0.2s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}
-                onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-              >
-                {getInitials(user?.firstName, user?.lastName)}
-              </button>
-
-              {showProfileMenu && (
-                <>
-                  <div
-                    style={{
-                      position: 'fixed',
-                      inset: 0,
-                      zIndex: 10
-                    }}
-                    onClick={() => setShowProfileMenu(false)}
-                  />
-                  <div style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '55px',
-                    backgroundColor: 'white',
-                    border: '1px solid #e7e5e4',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                    minWidth: '200px',
-                    overflow: 'hidden',
-                    zIndex: 20
-                  }}>
-                    <Link
-                      to="/profile"
-                      style={{
-                        display: 'block',
-                        padding: '12px 20px',
-                        color: '#1c1917',
-                        textDecoration: 'none',
-                        fontSize: '0.95rem',
-                        fontFamily: 'Inter, sans-serif',
-                        borderBottom: '1px solid #f5f5f4',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-                    >
-                      Mi perfil
-                    </Link>
-                    <button
-                      onClick={handleLogout}
-                      style={{
-                        width: '100%',
-                        padding: '12px 20px',
-                        textAlign: 'left',
-                        color: '#dc2626',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        fontSize: '0.95rem',
-                        cursor: 'pointer',
-                        fontFamily: 'Inter, sans-serif',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#fef2f2'}
-                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-                    >
-                      Cerrar sesión
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <Navbar activeLink="my-trips" />
 
       {/* Main Content */}
       <div style={{
@@ -581,7 +372,6 @@ export default function MyTrips() {
             alignItems: 'start',
             gap: '12px'
           }}>
-            <span style={{ color: '#dc2626', fontSize: '20px' }}>⚠️</span>
             <div style={{ flex: 1 }}>
               <p style={{ color: '#991b1b', fontSize: '14px', margin: 0, fontFamily: 'Inter, sans-serif' }}>
                 {error}
@@ -828,23 +618,75 @@ export default function MyTrips() {
                     </p>
                   </div>
                   <div>
-                    <p style={{
-                      fontSize: '0.8rem',
-                      color: '#57534e',
-                      margin: '0 0 4px 0',
-                      fontFamily: 'Inter, sans-serif'
-                    }}>
-                      Conductor
-                    </p>
-                    <p style={{
-                      fontSize: '1rem',
-                      fontWeight: '500',
-                      color: '#1c1917',
-                      margin: 0,
-                      fontFamily: 'Inter, sans-serif'
-                    }}>
-                      {booking.trip.driver.firstName} {booking.trip.driver.lastName}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <p style={{
+                        fontSize: '0.8rem',
+                        color: '#57534e',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
+                        Conductor
+                      </p>
+                      {booking.status === 'accepted' && booking.trip.driverId && (
+                        <button
+                          onClick={() => setShowReportModal({
+                            userId: booking.trip.driverId,
+                            userName: `${booking.trip.driver.firstName} ${booking.trip.driver.lastName}`,
+                            tripId: booking.tripId
+                          })}
+                          style={{
+                            padding: '2px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: 'normal',
+                            color: '#dc2626',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #dc2626',
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            fontFamily: 'Inter, sans-serif'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = '#fef2f2';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = 'transparent';
+                          }}
+                          title="Reportar conductor"
+                        >
+                          Reportar
+                        </button>
+                      )}
+                    </div>
+                    {booking.trip.driverId ? (
+                      <Link
+                        to={`/drivers/${booking.trip.driverId}`}
+                        style={{
+                          fontSize: '1rem',
+                          fontWeight: '500',
+                          color: '#032567',
+                          margin: 0,
+                          fontFamily: 'Inter, sans-serif',
+                          textDecoration: 'none',
+                          transition: 'color 0.2s',
+                          cursor: 'pointer'
+                        }}
+                        onMouseEnter={(e) => e.target.style.color = '#1A6EFF'}
+                        onMouseLeave={(e) => e.target.style.color = '#032567'}
+                      >
+                        {booking.trip.driver.firstName} {booking.trip.driver.lastName} →
+                      </Link>
+                    ) : (
+                      <p style={{
+                        fontSize: '1rem',
+                        fontWeight: '500',
+                        color: '#1c1917',
+                        margin: 0,
+                        fontFamily: 'Inter, sans-serif'
+                      }}>
+                        {booking.trip.driver.firstName} {booking.trip.driver.lastName}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p style={{
@@ -920,7 +762,7 @@ export default function MyTrips() {
                   </div>
                 )}
 
-                {booking.status === 'accepted' && isTripUpcoming(booking.trip.departureAt) && (
+                {booking.status === 'accepted' && booking.trip.status === 'published' && (
                   <div style={{
                     padding: '12px 16px',
                     backgroundColor: '#f0fdf4',
@@ -939,7 +781,7 @@ export default function MyTrips() {
                   </div>
                 )}
 
-                {booking.status === 'accepted' && isTripPast(booking.trip.departureAt) && (
+                {booking.status === 'accepted' && booking.trip.status === 'completed' && (
                   <div style={{
                     padding: '12px 16px',
                     backgroundColor: '#eff6ff',
@@ -1132,6 +974,19 @@ export default function MyTrips() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Report User Modal */}
+      {showReportModal && (
+        <ReportUserModal
+          userId={showReportModal.userId}
+          userName={showReportModal.userName}
+          tripId={showReportModal.tripId}
+          onClose={() => setShowReportModal(null)}
+          onReported={() => {
+            setSuccess('Usuario reportado exitosamente');
+          }}
+        />
       )}
     </div>
   );

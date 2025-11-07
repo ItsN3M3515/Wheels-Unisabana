@@ -19,6 +19,8 @@ import CreateReview from './pages/reviews/CreateReview';
 import DriverVerificationPage from './pages/driver/DriverVerification';
 import AdminDashboardPage from './pages/admin/AdminDashboard';
 import AdminAuditPage from './pages/admin/AdminAudit';
+import Reports from './pages/Reports';
+import DriverProfile from './pages/DriverProfile';
 
 // Components
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -187,6 +189,26 @@ export default function App() {
               <AdminAuditPage />
             </ProtectedRoute>
           }
+        />
+
+        {/* Reports route (accessible to both roles) */}
+        <Route 
+          path="/reports" 
+          element={
+            <ProtectedRoute>
+              <Reports />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Driver Profile route (public, shows reviews) */}
+        <Route 
+          path="/drivers/:driverId" 
+          element={
+            <ProtectedRoute>
+              <DriverProfile />
+            </ProtectedRoute>
+          } 
         />
 
         {/* Fallback */}

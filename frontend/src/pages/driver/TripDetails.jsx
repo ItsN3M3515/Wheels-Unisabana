@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { getTripOfferById, getTripBookings, acceptBooking, declineBooking } from '../../api/tripOffer';
+import { getTripOfferById, getTripBookings, acceptBooking, declineBooking, startTrip, completeTrip } from '../../api/tripOffer';
 import logo from '../../assets/images/UniSabana Logo.png';
 import Toast from '../../components/common/Toast';
+import ReportUserModal from '../../components/users/ReportUserModal';
+import NotificationBell from '../../components/notifications/NotificationBell';
+import useAuthStore from '../../store/authStore';
 
 export default function TripDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [trip, setTrip] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,6 +20,7 @@ export default function TripDetails() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(null); // {userId, userName}
 
   useEffect(() => {
     loadTripDetails();
@@ -130,6 +135,7 @@ export default function TripDetails() {
     const badges = {
       draft: { bg: '#f5f5f4', color: '#57534e', text: 'Borrador' },
       published: { bg: '#e0f2fe', color: '#032567', text: 'Publicado' },
+      in_progress: { bg: '#e0f2fe', color: '#032567', text: 'En progreso' },
       canceled: { bg: '#f5f5f4', color: '#57534e', text: 'Cancelado' },
       completed: { bg: '#f5f5f4', color: '#57534e', text: 'Completado' },
     };
@@ -251,7 +257,8 @@ export default function TripDetails() {
           margin: '0 auto',
           padding: '16px 24px',
           display: 'flex',
-          alignItems: 'center'
+          alignItems: 'center',
+          justifyContent: 'space-between'
         }}>
           <Link 
             to="/dashboard" 
@@ -283,6 +290,11 @@ export default function TripDetails() {
               Wheels UniSabana
             </span>
           </Link>
+
+          {/* Right: Notifications */}
+          {user && (
+            <NotificationBell />
+          )}
         </div>
       </header>
 
@@ -568,6 +580,107 @@ export default function TripDetails() {
                   </p>
                 </div>
               </div>
+
+              {/* Trip Actions */}
+              {trip.status === 'published' && (
+                <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '20px', marginTop: '16px' }}>
+                  <button
+                    onClick={async () => {
+                      setActionLoading(true);
+                      setError(null);
+                      setSuccess(null);
+                      try {
+                        await startTrip(id);
+                        setToast({
+                          message: 'Viaje iniciado exitosamente',
+                          type: 'success'
+                        });
+                        loadTripDetails();
+                      } catch (err) {
+                        setToast({
+                          message: err.message || 'Error al iniciar el viaje',
+                          type: 'error'
+                        });
+                      } finally {
+                        setActionLoading(false);
+                      }
+                    }}
+                    disabled={actionLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '1rem',
+                      fontWeight: 'normal',
+                      color: 'white',
+                      backgroundColor: actionLoading ? '#94a3b8' : '#032567',
+                      border: 'none',
+                      borderRadius: '25px',
+                      cursor: actionLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      fontFamily: 'Inter, sans-serif',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!actionLoading) e.target.style.backgroundColor = '#1A6EFF';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!actionLoading) e.target.style.backgroundColor = '#032567';
+                    }}
+                  >
+                    {actionLoading ? 'Procesando...' : '▶ Iniciar viaje'}
+                  </button>
+                </div>
+              )}
+
+              {trip.status === 'in_progress' && (
+                <div style={{ borderTop: '1px solid #e0f2fe', paddingTop: '20px', marginTop: '16px' }}>
+                  <button
+                    onClick={async () => {
+                      setActionLoading(true);
+                      setError(null);
+                      setSuccess(null);
+                      try {
+                        await completeTrip(id);
+                        setToast({
+                          message: 'Viaje finalizado exitosamente',
+                          type: 'success'
+                        });
+                        loadTripDetails();
+                      } catch (err) {
+                        setToast({
+                          message: err.message || 'Error al finalizar el viaje',
+                          type: 'error'
+                        });
+                      } finally {
+                        setActionLoading(false);
+                      }
+                    }}
+                    disabled={actionLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      fontSize: '1rem',
+                      fontWeight: 'normal',
+                      color: 'white',
+                      backgroundColor: actionLoading ? '#94a3b8' : '#032567',
+                      border: 'none',
+                      borderRadius: '25px',
+                      cursor: actionLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      fontFamily: 'Inter, sans-serif',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!actionLoading) e.target.style.backgroundColor = '#1A6EFF';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!actionLoading) e.target.style.backgroundColor = '#032567';
+                    }}
+                  >
+                    {actionLoading ? 'Procesando...' : '✓ Finalizar viaje'}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Bookings Section */}
@@ -674,6 +787,36 @@ export default function TripDetails() {
                         </p>
                       )}
                       
+                      {/* Report button for accepted bookings */}
+                      {booking.status === 'accepted' && (
+                        <button
+                          onClick={() => setShowReportModal({
+                            userId: booking.passengerId,
+                            userName: `${booking.passenger.firstName} ${booking.passenger.lastName}`
+                          })}
+                          style={{
+                            marginTop: '12px',
+                            padding: '6px 16px',
+                            fontSize: '0.85rem',
+                            fontWeight: 'normal',
+                            color: '#dc2626',
+                            backgroundColor: 'white',
+                            border: '1px solid #dc2626',
+                            borderRadius: '20px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            fontFamily: 'Inter, sans-serif'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = '#fef2f2';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = 'white';
+                          }}
+                        >
+                          Reportar pasajero
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -885,6 +1028,22 @@ export default function TripDetails() {
           message={toast.message}
           type={toast.type}
           onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* Report User Modal */}
+      {showReportModal && trip && (
+        <ReportUserModal
+          userId={showReportModal.userId}
+          userName={showReportModal.userName}
+          tripId={trip.id}
+          onClose={() => setShowReportModal(null)}
+          onReported={() => {
+            setToast({
+              message: 'Usuario reportado exitosamente',
+              type: 'success'
+            });
+          }}
         />
       )}
     </div>

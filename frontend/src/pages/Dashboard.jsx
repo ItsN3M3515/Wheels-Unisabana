@@ -395,33 +395,6 @@ export default function Dashboard() {
                       </button>
                     )}
 
-                    {!isDriver && (
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          // Payment functionality removed
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '10px 16px',
-                          textAlign: 'left',
-                          fontSize: '0.9rem',
-                          color: '#1c1917',
-                          backgroundColor: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.2s',
-                          fontFamily: 'Inter, sans-serif',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
-                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-                      >
-                        Historial de pagos
-                      </button>
-                    )}
                   </div>
 
                   {/* Logout */}
@@ -468,7 +441,7 @@ export default function Dashboard() {
         {/* Hero / Welcome Section */}
         <div style={{ marginBottom: '48px' }}>
           <h1 style={{
-            fontSize: '3rem',
+            fontSize: '4.5rem',
             fontWeight: 'normal',
             color: '#1c1917',
             marginBottom: '8px',
@@ -477,7 +450,7 @@ export default function Dashboard() {
             ¡Hola de nuevo, {user?.firstName}!
           </h1>
           <p style={{
-            fontSize: '1.2rem',
+            fontSize: '1.8rem',
             color: '#57534e',
             fontFamily: 'Inter, sans-serif'
           }}>
@@ -586,38 +559,6 @@ export default function Dashboard() {
                     <span style={{ fontSize: '1.5rem' }}>+</span>
                     Ofrecer nuevo viaje
                   </button>
-                  
-                  <button
-                    onClick={() => navigate('/driver/booking-requests')}
-                    style={{
-                      padding: '0.75rem 2rem',
-                      fontSize: '1.2rem',
-                      fontWeight: 'normal',
-                      color: '#032567',
-                      backgroundColor: 'white',
-                      border: '2px solid #032567',
-                      borderRadius: '25px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      fontFamily: 'Inter, sans-serif',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.backgroundColor = '#f8fafc';
-                      e.target.style.transform = 'translateY(-2px)';
-                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.backgroundColor = 'white';
-                      e.target.style.transform = 'translateY(0)';
-                      e.target.style.boxShadow = '0 2px 6px rgba(0,0,0,0.1)';
-                    }}
-                  >
-                    💰 Ver Reservas y Pagos
-                  </button>
                 </div>
 
                 {/* Section title */}
@@ -628,7 +569,7 @@ export default function Dashboard() {
                   marginBottom: '24px'
                 }}>
                   <h2 style={{
-                    fontSize: '1.8rem',
+                    fontSize: '2.5rem',
                     fontWeight: 'normal',
                     color: '#1c1917',
                     fontFamily: 'Inter, sans-serif'
@@ -671,7 +612,6 @@ export default function Dashboard() {
                     borderRadius: '16px',
                     border: '2px dashed #e7e5e4'
                   }}>
-                    <div style={{ fontSize: '4rem', marginBottom: '16px' }}>🚗</div>
                     <h3 style={{
                       fontSize: '1.5rem',
                       fontWeight: 'normal',
@@ -807,7 +747,7 @@ export default function Dashboard() {
                           color: '#57534e',
                           fontFamily: 'Inter, sans-serif'
                         }}>
-                          <span>💺 {trip.totalSeats} asientos</span>
+                          <span>{trip.totalSeats} asientos</span>
                           {trip.notes && (
                             <span style={{
                               maxWidth: '150px',
@@ -815,7 +755,7 @@ export default function Dashboard() {
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap'
                             }}>
-                              💬 {trip.notes}
+                              {trip.notes}
                             </span>
                           )}
                         </div>
@@ -826,18 +766,6 @@ export default function Dashboard() {
               </>
             )}
 
-            {/* Passenger Content (placeholder for now) */}
-            {!isDriver && (
-              <div style={{
-                textAlign: 'center',
-                color: '#57534e',
-                fontSize: '1.1rem',
-                padding: '40px',
-                fontFamily: 'Inter, sans-serif'
-              }}>
-                📊 Vista de pasajero en construcción...
-              </div>
-            )}
           </>
         )}
       </div>

@@ -207,7 +207,6 @@ export default function RegisterVehicle() {
                       </div>
                     ) : (
                       <label className="cursor-pointer block">
-                        <div className="text-4xl mb-2">🚗</div>
                         <p className="text-sm text-neutral-600 mb-1">
                           Click para subir foto
                         </p>
@@ -251,7 +250,6 @@ export default function RegisterVehicle() {
                       </div>
                     ) : (
                       <label className="cursor-pointer block">
-                        <div className="text-4xl mb-2">📄</div>
                         <p className="text-sm text-neutral-600 mb-1">
                           Click para subir foto
                         </p>

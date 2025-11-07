@@ -910,5 +910,31 @@ router.post(
   tripOfferController.declineBooking.bind(tripOfferController)
 );
 
+/**
+ * Start a trip (change status from published to in_progress)
+ */
+router.post(
+  '/trips/:id/start',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.startTrip.bind(tripOfferController)
+);
+
+/**
+ * Complete a trip (change status from in_progress to completed)
+ */
+router.post(
+  '/trips/:id/complete',
+  generalRateLimiter,
+  authenticate,
+  requireRole('driver'),
+  requireCsrf,
+  validateRequest(tripIdParamSchema, 'params'),
+  tripOfferController.completeTrip.bind(tripOfferController)
+);
+
 module.exports = router;
 

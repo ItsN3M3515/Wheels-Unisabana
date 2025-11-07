@@ -352,6 +352,106 @@ class TripOfferService {
   }
 
   /**
+   * Start a trip (change status from published to in_progress)
+   * Legal transitions: published → in_progress
+   * 
+   * @param {string} tripId - Trip ID to start
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @returns {Promise<TripOffer>} Started trip offer
+   * @throws {DomainError} if trip not found or ownership violation
+   * @throws {InvalidTransitionError} if trip cannot be started from current state
+   */
+  async startTrip(tripId, driverId) {
+    console.log(`[TripOfferService] Attempting to start trip | tripId: ${tripId} | driverId: ${driverId}`);
+
+    // Find trip offer
+    const tripOffer = await this.tripOfferRepository.findById(tripId);
+    if (!tripOffer) {
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
+    }
+
+    // Validate ownership
+    if (tripOffer.driverId !== driverId) {
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation', 403);
+    }
+
+    // Use entity's startTrip() method which enforces legal transitions
+    try {
+      tripOffer.startTrip();
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.currentState} | attemptedState: ${error.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
+    }
+
+    // Persist status change
+    const startedTripOffer = await this.tripOfferRepository.update(tripId, {
+      status: tripOffer.status,
+      updatedAt: tripOffer.updatedAt
+    });
+
+    console.log(
+      `[TripOfferService] Trip started | tripId: ${tripId} | driverId: ${driverId} | previousStatus: published`
+    );
+
+    return startedTripOffer;
+  }
+
+  /**
+   * Complete a trip (change status from in_progress to completed)
+   * Legal transitions: in_progress → completed
+   * 
+   * @param {string} tripId - Trip ID to complete
+   * @param {string} driverId - Driver ID (ownership validation)
+   * @returns {Promise<TripOffer>} Completed trip offer
+   * @throws {DomainError} if trip not found or ownership violation
+   * @throws {InvalidTransitionError} if trip cannot be completed from current state
+   */
+  async completeTrip(tripId, driverId) {
+    console.log(`[TripOfferService] Attempting to complete trip | tripId: ${tripId} | driverId: ${driverId}`);
+
+    // Find trip offer
+    const tripOffer = await this.tripOfferRepository.findById(tripId);
+    if (!tripOffer) {
+      throw new DomainError('Trip offer not found', 'trip_not_found', 404);
+    }
+
+    // Validate ownership
+    if (tripOffer.driverId !== driverId) {
+      throw new DomainError('Trip does not belong to the driver', 'ownership_violation', 403);
+    }
+
+    // Use entity's completeTrip() method which enforces legal transitions
+    try {
+      tripOffer.completeTrip();
+    } catch (error) {
+      if (error instanceof InvalidTransitionError) {
+        console.log(
+          `[TripOfferService] Invalid transition | tripId: ${tripId} | currentState: ${error.currentState} | attemptedState: ${error.attemptedState}`
+        );
+        throw error;
+      }
+      throw error;
+    }
+
+    // Persist status change
+    const completedTripOffer = await this.tripOfferRepository.update(tripId, {
+      status: tripOffer.status,
+      updatedAt: tripOffer.updatedAt
+    });
+
+    console.log(
+      `[TripOfferService] Trip completed | tripId: ${tripId} | driverId: ${driverId} | previousStatus: in_progress`
+    );
+
+    return completedTripOffer;
+  }
+
+  /**
    * Cancel trip offer with cascade to all bookings (US-3.4.2)
    * 
    * Atomically:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getDriverReviews, getDriverRatings, adminSetVisibility } from '../../api/review';
 import { reportReview } from '../../api/review';
 import useAuthStore from '../../store/authStore';
@@ -20,12 +20,7 @@ export default function ReviewList({ driverId }) {
   const [showReportModalFor, setShowReportModalFor] = useState(null);
   const [reportedCooldowns, setReportedCooldowns] = useState({});
 
-  useEffect(() => {
-    fetchReviews();
-    fetchRatings();
-  }, [driverId, page]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getDriverReviews(driverId, { page, pageSize: 10 });
@@ -36,16 +31,45 @@ export default function ReviewList({ driverId }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [driverId, page]);
 
-  const fetchRatings = async () => {
+  const fetchRatings = useCallback(async () => {
     try {
       const data = await getDriverRatings(driverId);
       setRatings(data);
     } catch (error) {
       console.error('Error fetching ratings:', error);
     }
-  };
+  }, [driverId]);
+
+  useEffect(() => {
+    fetchReviews();
+    fetchRatings();
+  }, [driverId, page, fetchReviews, fetchRatings]);
+
+  // Refresh ratings when window regains focus (e.g., after creating a review in another tab/page)
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchRatings();
+      fetchReviews();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [driverId, fetchRatings, fetchReviews]);
+
+  // Refresh ratings periodically to catch new reviews (every 30 seconds)
+  useEffect(() => {
+    // Only set up interval if component is visible
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        fetchRatings();
+        fetchReviews();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [driverId, fetchRatings, fetchReviews]);
 
   if (loading && reviews.length === 0) {
     return <Loading />;

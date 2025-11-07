@@ -6,7 +6,7 @@ import Button from './Button';
 import Card from './Card';
 
 export default function Empty({
-  icon = '📭',
+  icon = '',
   title = 'No hay datos',
   description,
   action,
@@ -15,7 +15,7 @@ export default function Empty({
 }) {
   const content = (
     <div className={`text-center py-12 ${className}`}>
-      <div className="text-6xl mb-4 animate-fade-in">{icon}</div>
+      {icon && <div className="text-6xl mb-4 animate-fade-in">{icon}</div>}
       <h3 className="text-xl font-semibold text-neutral-900 mb-2">
         {title}
       </h3>
@@ -48,7 +48,7 @@ export default function Empty({
 export function EmptyTrips({ onCreateTrip, isDriver = false }) {
   return (
     <Empty
-      icon="🚗"
+      icon=""
       title={isDriver ? 'No tienes viajes' : 'No hay viajes disponibles'}
       description={
         isDriver
@@ -71,7 +71,7 @@ export function EmptyTrips({ onCreateTrip, isDriver = false }) {
 export function EmptySearch({ onClearFilters }) {
   return (
     <Empty
-      icon="🔍"
+      icon=""
       title="No se encontraron resultados"
       description="Intenta ajustar tus filtros de búsqueda"
       action={{
@@ -87,7 +87,7 @@ export function EmptySearch({ onClearFilters }) {
 export function EmptyBookings({ onSearchTrips }) {
   return (
     <Empty
-      icon="🎒"
+      icon=""
       title="No tienes reservas"
       description="Busca viajes disponibles y solicita tu lugar"
       action={{
@@ -102,7 +102,7 @@ export function EmptyBookings({ onSearchTrips }) {
 export function EmptyNotifications() {
   return (
     <Empty
-      icon="🔔"
+      icon=""
       title="No hay notificaciones"
       description="Te notificaremos cuando haya novedades"
       variant="card"

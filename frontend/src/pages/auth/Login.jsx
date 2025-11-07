@@ -171,7 +171,6 @@ export default function Login() {
             alignItems: 'start',
             gap: '12px'
           }}>
-            <span style={{ color: '#dc2626', fontSize: '20px' }}>⚠️</span>
             <div style={{ flex: 1 }}>
               <p style={{ color: '#991b1b', fontSize: '14px', margin: 0 }}>
                 {error}

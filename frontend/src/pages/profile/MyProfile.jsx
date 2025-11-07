@@ -5,6 +5,8 @@ import { getMyProfile, toggleRole as toggleRoleApi } from '../../api/user';
 import { logout as logoutApi } from '../../api/auth';
 import logo from '../../assets/images/UniSabana Logo.png';
 import ChangePassword from './ChangePassword';
+import ReviewList from '../../components/reviews/ReviewList';
+import NotificationBell from '../../components/notifications/NotificationBell';
 
 export default function MyProfile() {
   const navigate = useNavigate();
@@ -272,12 +274,17 @@ export default function MyProfile() {
             </Link>
           </nav>
 
-          {/* Right: Role Status + Profile */}
+          {/* Right: Notifications + Role Status + Profile */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '16px'
           }}>
+            {/* Notifications */}
+            {user && (
+              <NotificationBell />
+            )}
+            
             {/* Role indicator */}
             <div style={{
               padding: '6px 16px',
@@ -289,7 +296,7 @@ export default function MyProfile() {
               fontWeight: '500',
               fontFamily: 'Inter, sans-serif'
             }}>
-              {isDriver ? '🚗 Conductor' : 'Pasajero'}
+              {isDriver ? 'Conductor' : 'Pasajero'}
             </div>
 
             {/* Profile button with menu */}
@@ -382,7 +389,7 @@ export default function MyProfile() {
                       onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
                       onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                     >
-                      👤 Mi perfil
+                      Mi perfil
                     </button>
 
                     {isDriver && (
@@ -409,7 +416,7 @@ export default function MyProfile() {
                         onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f4'}
                         onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                       >
-                        🚗 Mi vehículo
+                        Mi vehículo
                       </button>
                     )}
                   </div>
@@ -439,7 +446,7 @@ export default function MyProfile() {
                       onMouseEnter={(e) => e.target.style.backgroundColor = '#fef2f2'}
                       onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                     >
-                      🚪 Cerrar sesión
+                      Cerrar sesión
                     </button>
                   </div>
                 </div>
@@ -478,7 +485,6 @@ export default function MyProfile() {
             alignItems: 'start',
             gap: '12px'
           }}>
-            <span style={{ color: '#dc2626', fontSize: '20px' }}>⚠️</span>
             <div style={{ flex: 1 }}>
               <p style={{ color: '#991b1b', fontSize: '14px', margin: 0 }}>
                 {error}
@@ -864,6 +870,26 @@ export default function MyProfile() {
               )}
             </div>
           </div>
+
+          {/* Reviews Section (for drivers) */}
+          {isDriver && profile?.id && (
+            <div style={{
+              marginTop: '48px',
+              paddingTop: '32px',
+              borderTop: '1px solid #e7e5e4'
+            }}>
+              <h2 style={{
+                fontSize: '1.8rem',
+                fontWeight: 'normal',
+                color: '#1c1917',
+                marginBottom: '24px',
+                fontFamily: 'Inter, sans-serif'
+              }}>
+                Reseñas
+              </h2>
+              <ReviewList driverId={profile.id} />
+            </div>
+          )}
 
           {/* Role Toggle Section */}
           <div style={{
