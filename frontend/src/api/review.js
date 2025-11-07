@@ -92,3 +92,15 @@ export async function reportReview(reviewId, reportData) {
   return response.data;
 }
 
+/**
+ * Admin: set review visibility (hide/unhide)
+ * @param {string} reviewId
+ * @param {'hide'|'unhide'} action
+ * @param {string} [reason]
+ * @returns {Promise<Object>}
+ */
+export async function adminSetVisibility(reviewId, action, reason) {
+  const response = await client.patch(`/admin/reviews/${reviewId}/visibility`, { action, reason });
+  return response.data;
+}
+

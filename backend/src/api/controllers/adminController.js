@@ -931,23 +931,29 @@ async function listAudit(req, res, next) {
     const pageNum = parseInt(page, 10);
     const pageSizeNum = parseInt(pageSize, 10);
 
-    // build Mongo query using audit document shape: ts, actor.type, actor.id, action, entity.type, entity.id, correlationId
-    const query = {};
-    if (entity) query['entity.type'] = entity;
-    if (entityType) query['entity.type'] = entityType;
-    if (entityId) query['entity.id'] = entityId;
-    if (who) query['actor.id'] = who; // legacy alias
-    if (actorId) query['actor.id'] = actorId;
-    if (actorType) query['actor.type'] = actorType;
+    // build Mongo query supporting both new (entity.type/entity.id) and legacy (entity/entityId/who) shapes
+    const and = [];
     if (action) {
-      // prefix search: action param 'trip.' should match /^trip\./
-      const safe = action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      query.action = { $regex: `^${safe}` };
+      const safe = action.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+      and.push({ action: { $regex: `^${safe}` } });
     }
-    if (correlationId) query.correlationId = correlationId;
-    if (from || to) query.ts = {};
-    if (from) query.ts.$gte = new Date(from);
-    if (to) query.ts.$lte = new Date(to);
+    // actor filters (support new actor.id and legacy who)
+    if (who) and.push({ $or: [ { 'actor.id': who }, { who: who } ] });
+    if (actorId) and.push({ $or: [ { 'actor.id': actorId }, { who: actorId } ] });
+    if (actorType) and.push({ 'actor.type': actorType });
+    // entity filters (support new entity.type/entity.id and legacy entity/entityId)
+    if (entity) and.push({ $or: [ { 'entity.type': entity }, { entity: entity } ] });
+    if (entityType) and.push({ $or: [ { 'entity.type': entityType }, { entity: entityType } ] });
+    if (entityId) and.push({ $or: [ { 'entity.id': entityId }, { entityId: entityId } ] });
+    if (correlationId) and.push({ correlationId });
+    if (from || to) {
+      const range = {};
+      if (from) range.$gte = new Date(from);
+      if (to) range.$lte = new Date(to);
+      and.push({ ts: range });
+    }
+
+    const query = and.length > 0 ? { $and: and } : {};
 
     const total = await AuditLogModel.countDocuments(query);
 
@@ -998,13 +1004,20 @@ async function exportAudit(req, res, next) {
   try {
     const { entity, entityId, who, actorId, actorType, action, entityType, correlationId, from, to } = req.query;
 
-  if (!from || !to) return res.status(400).json({ code: 'invalid_schema', message: 'Invalid date range', correlationId: req.correlationId });
+  // Support optional from/to. If omitted, export entire range.
+  let fromDate;
+  let toDate;
   // Support both Joi-coerced Date objects and string date inputs (YYYY-MM-DD)
-  const fromDate = (from instanceof Date) ? new Date(new Date(from).toISOString().slice(0,10) + 'T00:00:00.000Z') : new Date(`${from}T00:00:00.000Z`);
-  const toDate = (to instanceof Date) ? new Date(new Date(to).toISOString().slice(0,10) + 'T23:59:59.999Z') : new Date(`${to}T23:59:59.999Z`);
+  if (!from || !to) {
+    fromDate = new Date(0);
+    toDate = new Date();
+  } else {
+    fromDate = (from instanceof Date) ? new Date(new Date(from).toISOString().slice(0,10) + 'T00:00:00.000Z') : new Date(`${from}T00:00:00.000Z`);
+    toDate = (to instanceof Date) ? new Date(new Date(to).toISOString().slice(0,10) + 'T23:59:59.999Z') : new Date(`${to}T23:59:59.999Z`);
     if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()) || fromDate > toDate) {
       return res.status(400).json({ code: 'invalid_schema', message: 'Invalid date range', correlationId: req.correlationId });
     }
+  }
 
     // Build flexible query supporting legacy and new shapes
     const and = [];

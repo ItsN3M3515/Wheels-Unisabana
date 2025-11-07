@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { getDriverReviews, getDriverRatings } from '../../api/review';
+import { getDriverReviews, getDriverRatings, adminSetVisibility } from '../../api/review';
+import { reportReview } from '../../api/review';
+import useAuthStore from '../../store/authStore';
+import ReportReviewModal from './ReportReviewModal';
 import { Star } from 'lucide-react';
 import Loading from '../common/Loading';
 import Empty from '../common/Empty';
@@ -14,6 +17,8 @@ export default function ReviewList({ driverId }) {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showReportModalFor, setShowReportModalFor] = useState(null);
+  const [reportedCooldowns, setReportedCooldowns] = useState({});
 
   useEffect(() => {
     fetchReviews();
@@ -150,6 +155,41 @@ export default function ReviewList({ driverId }) {
                     ))}
                   </div>
                 )}
+                <div className="flex items-center gap-2 mt-3">
+                  {/* Report button for authenticated users */}
+                  {useAuthStore.getState().isAuthenticated && (
+                    <>
+                      <button
+                        onClick={() => setShowReportModalFor(review.id)}
+                        disabled={!!reportedCooldowns[review.id]}
+                        className="px-3 py-1 text-sm border rounded hover:bg-neutral-50 disabled:opacity-50"
+                      >
+                        {reportedCooldowns[review.id] ? 'Reportado' : 'Reportar'}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Admin controls */}
+                  {useAuthStore.getState().user?.role === 'admin' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const action = review.status === 'hidden' ? 'unhide' : 'hide';
+                          await adminSetVisibility(review.id, action, 'Moderación desde UI');
+                          // update local list
+                          setReviews((rs) => rs.map(r => r.id === review.id ? { ...r, status: action === 'hide' ? 'hidden' : 'visible' } : r));
+                          // refresh aggregates
+                          fetchRatings();
+                        } catch (e) {
+                          console.error('Error changing visibility', e);
+                        }
+                      }}
+                      className="px-3 py-1 text-sm border rounded hover:bg-neutral-50"
+                    >
+                      {review.status === 'hidden' ? 'Mostrar' : 'Ocultar'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -178,6 +218,23 @@ export default function ReviewList({ driverId }) {
           </div>
         )}
       </div>
+      {showReportModalFor && (
+        <ReportReviewModal
+          reviewId={showReportModalFor}
+          onClose={() => setShowReportModalFor(null)}
+          onReported={() => {
+            // set a simple 30-second client-side cooldown for the reported review
+            setReportedCooldowns((s) => ({ ...s, [showReportModalFor]: true }));
+            setTimeout(() => {
+              setReportedCooldowns((s) => {
+                const copy = { ...s };
+                delete copy[showReportModalFor];
+                return copy;
+              });
+            }, 30_000);
+          }}
+        />
+      )}
     </div>
   );
 }

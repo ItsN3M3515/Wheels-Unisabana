@@ -121,8 +121,8 @@ const exportAuditQuery = Joi.object({
   action: Joi.string().optional(),
   entityType: Joi.string().optional(),
   correlationId: Joi.string().optional(),
-  from: Joi.date().iso().required(),
-  to: Joi.date().iso().required()
+  from: Joi.date().iso().optional(),
+  to: Joi.date().iso().optional()
 }).options({ abortEarly: false, stripUnknown: true });
 
 module.exports.listAuditQuery = listAuditQuery;
